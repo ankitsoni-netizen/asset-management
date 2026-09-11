@@ -1,5 +1,5 @@
 export const ADMIN_EMAIL = (
-  process.env.ADMIN_EMAIL ?? "admin@cloutflow.com"
+  process.env.ADMIN_EMAIL?.trim() || "admin@cloutflow.com"
 ).toLowerCase();
 
 export { DEPARTMENTS, CUSTOM_DEPARTMENT } from "./employee";

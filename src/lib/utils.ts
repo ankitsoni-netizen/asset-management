@@ -6,10 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function appUrl() {
-  return (process.env.APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000").replace(
-    /\/$/,
-    "",
-  );
+  const fromEnv = process.env.APP_URL?.trim() || process.env.AUTH_URL?.trim();
+  if (process.env.VERCEL_URL && (!fromEnv || /localhost|127\.0\.0\.1/.test(fromEnv))) {
+    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
+  }
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  return "http://localhost:3100";
 }
 
 export function normalizeUid(value: string) {
