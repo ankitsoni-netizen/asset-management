@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  --cf-primary: #073efd;
+  --cf-primary-dark: #052fc4;
+  --cf-ink: #0a0d14;
+  --cf-navy: #0b1220;
+  --cf-text: #111827;
+  --cf-muted: #667085;
+  --cf-border: #e6e8ee;
+  --cf-soft: #f4f6fb;
+  --cf-page: #f7f8fb;
+}
+
+@theme inline {
+  --color-cf-primary: var(--cf-primary);
+  --color-cf-primary-dark: var(--cf-primary-dark);
+  --color-cf-ink: var(--cf-ink);
+  --color-cf-navy: var(--cf-navy);
+  --color-cf-text: var(--cf-text);
+  --color-cf-muted: var(--cf-muted);
+  --color-cf-border: var(--cf-border);
+  --color-cf-soft: var(--cf-soft);
+  --color-cf-page: var(--cf-page);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--cf-page);
+  color: var(--cf-text);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline-color: var(--cf-primary);
+}
+
+.cf-card {
+  background: #fff;
+  border: 1px solid var(--cf-border);
+  border-radius: 16px;
+}
+
+.cf-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-muted);
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

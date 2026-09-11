@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model AssetType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isCustom  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  assets    Asset[]
+}
+
+model Asset {
+  id           String       @id @default(cuid())
+  uid          String       @unique
+  assetTypeId  String
+  assetType    AssetType    @relation(fields: [assetTypeId], references: [id])
+  brand        String?
+  model        String?
+  serialNumber String?
+  notes        String?
+  status       String       @default("allocated")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  allocations  Allocation[]
+}
+
+model Allocation {
+  id               String       @id @default(cuid())
+  assetId          String
+  asset            Asset        @relation(fields: [assetId], references: [id])
+  employeeName     String
+  department       String
+  position         String
+  employeeEmail    String
+  action           String       @default("allocated")
+  allocatedAt      DateTime     @default(now())
+  endedAt          DateTime?
+  isCurrent        Boolean      @default(true)
+  confirmationNote String?
+  emailSent        Boolean      @default(false)
+  emailError       String?
+  images           AssetImage[]
+}
+
+model AssetImage {
+  id           String     @id @default(cuid())
+  allocationId String
+  allocation   Allocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  filename     String
+  mimeType     String
+  createdAt    DateTime   @default(now())
+}
