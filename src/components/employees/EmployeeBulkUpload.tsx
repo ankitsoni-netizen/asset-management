@@ -66,13 +66,16 @@ export function EmployeeBulkUpload() {
           Use this CSV as the template. Keep the header row, then add one employee per line. Employee ID is
           optional. Open it in Excel or Google Sheets and save it again as CSV before uploading.
         </p>
-        <a
-          href="/api/employees/sample"
+        <button
+          type="button"
+          onClick={() => {
+            window.location.href = "/api/employees/sample";
+          }}
           className="cf-action mt-5 border border-cf-border"
         >
           <Download className="h-4 w-4" />
           Download sample CSV
-        </a>
+        </button>
         <div className="mt-5 overflow-x-auto rounded-lg bg-cf-soft px-4 py-3 font-mono text-xs text-cf-muted">
           name,email,department,position,employee_id
         </div>
