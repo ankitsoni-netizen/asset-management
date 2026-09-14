@@ -1,37 +1,19 @@
-import NextAuth from "next-auth";
-import { NextResponse } from "next/server";
-import { authConfig } from "@/auth.config";
-import { ADMIN_EMAIL } from "@/lib/constants";
+import { NextResponse, type NextRequest } from "next/server";
+import { loginRedirectPath } from "@/lib/auth-path";
+import { updateSession } from "@/lib/supabase/middleware";
 
-const { auth } = NextAuth(authConfig);
-
-export default auth((request) => {
-  const { pathname } = request.nextUrl;
-  const isLogin = pathname.startsWith("/login");
-  const email = request.auth?.user?.email?.toLowerCase();
-  const isAdmin = email === ADMIN_EMAIL;
-
-  if (isLogin) {
-    if (isAdmin) {
-      return NextResponse.redirect(new URL("/", request.nextUrl));
+export async function middleware(request: NextRequest) {
+  try {
+    return await updateSession(request);
+  } catch (error) {
+    console.error("Routing middleware crashed:", error);
+    if (request.nextUrl.pathname.startsWith("/login")) {
+      return NextResponse.next({ request });
     }
-    return NextResponse.next();
+    return NextResponse.redirect(new URL(loginRedirectPath(request.nextUrl.pathname), request.url));
   }
-
-  if (!isAdmin) {
-    const loginUrl = new URL("/login", request.nextUrl);
-    if (pathname !== "/") {
-      loginUrl.searchParams.set("callbackUrl", pathname);
-    }
-    if (request.auth?.user?.email) {
-      loginUrl.searchParams.set("error", "AccessDenied");
-    }
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
-});
+}
 
 export const config = {
-  matcher: ["/((?!api/auth|_next/static|_next/image|brand|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|brand|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

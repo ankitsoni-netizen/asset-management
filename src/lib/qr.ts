@@ -1,12 +1,12 @@
 import QRCode from "qrcode";
-import { appUrl } from "./utils";
+import { normalizeUid } from "./utils";
 
-export function assetUrl(uid: string) {
-  return `${appUrl()}/a/${encodeURIComponent(uid)}`;
+export function qrPayloadForUid(uid: string) {
+  return normalizeUid(uid);
 }
 
 export async function generateQrDataUrl(uid: string) {
-  return QRCode.toDataURL(assetUrl(uid), {
+  return QRCode.toDataURL(qrPayloadForUid(uid), {
     width: 480,
     margin: 1,
     errorCorrectionLevel: "H",

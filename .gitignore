@@ -31,7 +31,6 @@ yarn-error.log*
 # env files
 .env
 .env*.local
-!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -42,3 +41,5 @@ next-env.d.ts
 /prisma/dev.db-journal
 /data/uploads
 .vercel
+.env*
+!.env.example

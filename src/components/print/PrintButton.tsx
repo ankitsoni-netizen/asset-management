@@ -1,13 +1,13 @@
 "use client";
 
-export function PrintButton() {
+export function PrintButton({ label = "Print" }: { label?: string }) {
   return (
     <button
       type="button"
       onClick={() => window.print()}
-      className="h-10 rounded-md bg-cf-primary px-4 text-sm font-medium text-white"
+      className="cf-action bg-cf-primary text-white hover:bg-cf-primary-dark"
     >
-      Print
+      {label}
     </button>
   );
 }

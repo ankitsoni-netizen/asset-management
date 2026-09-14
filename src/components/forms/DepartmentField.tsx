@@ -21,7 +21,7 @@ export function DepartmentField({
           required
           value={department}
           onChange={(event) => onDepartmentChange(event.target.value)}
-          className="mt-2 h-11 w-full rounded-md border border-cf-border px-3 text-sm"
+          className="mt-2 h-12 w-full rounded-md border border-cf-border px-3 sm:h-11"
         >
           {DEPARTMENTS.map((item) => (
             <option key={item} value={item}>
@@ -38,7 +38,7 @@ export function DepartmentField({
             required
             value={customDepartment}
             onChange={(event) => onCustomDepartmentChange(event.target.value)}
-            className="mt-2 h-11 w-full rounded-md border border-cf-border px-3 text-sm"
+            className="mt-2 h-12 w-full rounded-md border border-cf-border px-3 sm:h-11"
             placeholder="Enter department name"
           />
         </label>

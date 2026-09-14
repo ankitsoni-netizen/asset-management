@@ -1,0 +1,2 @@
+-- Default asset types are inserted by the initial migration.
+-- Do not seed employees, assets, or allocations.

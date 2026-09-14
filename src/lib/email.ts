@@ -1,122 +1,175 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import nodemailer from "nodemailer";
-import { COMPANY } from "./constants";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
+import { isOfficialEmployeeEmail } from "./employee";
 import { formatDate } from "./utils";
 
-type AllocationMail = {
+export type AllocationMail = {
   employeeName: string;
   employeeEmail: string;
-  department: string;
-  position: string;
   assetName: string;
   uid: string;
   brand?: string | null;
   model?: string | null;
   serialNumber?: string | null;
-  action: "allocated" | "reallocated";
   allocatedAt: Date;
 };
 
-function smtpConfigured() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-}
+export type SmtpConfig = {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  fromEmail: string;
+  fromName: string;
+};
 
-function transporter() {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: Number(process.env.SMTP_PORT || 587) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+export type SmtpConfigResult =
+  | { ok: true; config: SmtpConfig }
+  | { ok: false; error: string };
+
+export type SendMailInfo = {
+  messageId?: string;
+  accepted?: unknown;
+  rejected?: unknown;
+  response?: string;
+};
+
+export type SendMailFn = (options: nodemailer.SendMailOptions) => Promise<SendMailInfo>;
+
+export type SendAllocationEmailResult =
+  | { sent: true; messageId: string | null }
+  | { sent: false; error: string; configured: boolean };
+
+type EnvMap = Record<string, string | undefined>;
+
+const SMTP_REQUIRED = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME"] as const;
+
+export function getSmtpConfig(env: EnvMap = process.env): SmtpConfigResult {
+  const missing = SMTP_REQUIRED.filter((key) => !env[key]?.trim());
+  if (missing.length) {
+    return {
+      ok: false,
+      error: `SMTP is not configured. Missing ${missing.join(", ")}.`,
+    };
+  }
+
+  const portRaw = env.SMTP_PORT?.trim() || "587";
+  const port = Number(portRaw);
+  if (!Number.isInteger(port) || port <= 0) {
+    return { ok: false, error: "SMTP is not configured. SMTP_PORT must be a valid port number." };
+  }
+
+  return {
+    ok: true,
+    config: {
+      host: env.SMTP_HOST!.trim(),
+      port,
+      user: env.SMTP_USER!.trim(),
+      pass: env.SMTP_PASS!.trim(),
+      fromEmail: env.SMTP_FROM_EMAIL!.trim(),
+      fromName: env.SMTP_FROM_NAME!.trim(),
     },
-  });
+  };
 }
 
-function subjectFor(mail: AllocationMail) {
-  if (mail.action === "reallocated") {
-    return `Asset reallocation acknowledgement — ${mail.uid}`;
-  }
-  return `Asset allocation acknowledgement — ${mail.uid}`;
+export function isSendableEmployeeEmail(email?: string | null) {
+  const normalized = email?.trim().toLowerCase() ?? "";
+  if (!normalized) return false;
+  return isOfficialEmployeeEmail(normalized);
 }
 
-function greetingLine(mail: AllocationMail) {
-  if (mail.action === "reallocated") {
-    return "This email confirms that a company asset has been reallocated to you.";
-  }
-  return "This email confirms that a company asset has been allocated to you.";
+export function brandModelLine(brand?: string | null, model?: string | null) {
+  const parts = [brand?.trim(), model?.trim()].filter((part): part is string => Boolean(part));
+  return parts.join(" ");
 }
 
-function row(label: string, value: string) {
-  return `
-    <tr>
-      <td style="padding:10px 0;border-bottom:1px solid #E6E8EE;width:160px;color:#667085;font-size:13px;">${label}</td>
-      <td style="padding:10px 0;border-bottom:1px solid #E6E8EE;color:#101828;font-size:13px;font-weight:600;">${value}</td>
-    </tr>
-  `;
+export function acknowledgementSubject(uid: string) {
+  return `Asset Allocation Acknowledgement — ${uid}`;
 }
 
-function htmlTemplate(mail: AllocationMail) {
-  const optional = [
-    mail.brand ? row("Brand", mail.brand) : "",
-    mail.model ? row("Model", mail.model) : "",
-    mail.serialNumber ? row("Serial number", mail.serialNumber) : "",
-  ].join("");
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function detailLines(mail: AllocationMail) {
+  const lines = [`Asset: ${mail.assetName}`];
+  const brandModel = brandModelLine(mail.brand, mail.model);
+  if (brandModel) lines.push(`Brand/Model: ${brandModel}`);
+  const serial = mail.serialNumber?.trim();
+  if (serial) lines.push(`Serial Number: ${serial}`);
+  lines.push(`Asset UID: ${mail.uid}`);
+  lines.push(`Allocation Date: ${formatDate(mail.allocatedAt)}`);
+  return lines;
+}
+
+export function textTemplate(mail: AllocationMail) {
+  return [
+    `Hi ${mail.employeeName},`,
+    "",
+    "This is to confirm that the following company asset has been allocated to you:",
+    "",
+    ...detailLines(mail),
+    "",
+    "Please keep the asset UID available for any future reference regarding this device.",
+    "",
+    "If any of the information above is incorrect, please contact the Cloutflow administration team.",
+    "",
+    "Regards,",
+    "Cloutflow Administration",
+  ].join("\n");
+}
+
+export function htmlTemplate(mail: AllocationMail) {
+  const rows = detailLines(mail)
+    .map((line) => {
+      const [label, ...rest] = line.split(": ");
+      const value = rest.join(": ");
+      return `<tr>
+          <td style="padding:8px 0;color:#4B5563;font-size:14px;line-height:1.5;width:160px;vertical-align:top;">${escapeHtml(label)}</td>
+          <td style="padding:8px 0;color:#111827;font-size:14px;line-height:1.5;font-weight:600;">${escapeHtml(value)}</td>
+        </tr>`;
+    })
+    .join("");
 
   return `<!DOCTYPE html>
-<html>
-  <body style="margin:0;padding:0;background:#F4F6FB;font-family:Arial,Helvetica,sans-serif;color:#101828;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F4F6FB;padding:32px 12px;">
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(acknowledgementSubject(mail.uid))}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#F5F6F8;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F5F6F8;padding:32px 12px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #E6E8EE;">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #E5E7EB;">
             <tr>
-              <td style="padding:22px 32px;background:#000000;border-bottom:3px solid #073EFD;">
-                <img src="cid:cloutflow-logo" alt="Cloutflow" width="168" style="display:block;width:168px;height:auto;" />
+              <td style="padding:24px 32px;border-bottom:1px solid #E5E7EB;">
+                <img src="cid:cloutflow-logo" alt="Cloutflow" width="168" style="display:block;width:168px;height:auto;border:0;" />
               </td>
             </tr>
             <tr>
-              <td style="padding:28px 32px 8px;">
-                <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#073EFD;font-weight:700;">
-                  ${mail.action === "reallocated" ? "Reallocation acknowledgement" : "Allocation acknowledgement"}
+              <td style="padding:28px 32px 32px;">
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Hi ${escapeHtml(mail.employeeName)},</p>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
+                  This is to confirm that the following company asset has been allocated to you:
                 </p>
-                <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;font-weight:700;color:#0A0D14;">
-                  Company asset record
-                </h1>
-                <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#344054;">
-                  Dear ${mail.employeeName},
-                </p>
-                <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#344054;">
-                  ${greetingLine(mail)} Please retain the UID below. It is printed on the allocated device and is the official reference for this asset.
-                </p>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                  ${row("Asset", mail.assetName)}
-                  ${row("UID", mail.uid)}
-                  ${row("Employee", mail.employeeName)}
-                  ${row("Department", mail.department)}
-                  ${row("Position", mail.position)}
-                  ${row("Official email", mail.employeeEmail)}
-                  ${row("Date", formatDate(mail.allocatedAt))}
-                  ${optional}
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;">
+                  ${rows}
                 </table>
-                <p style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#344054;">
-                  If any detail above is incorrect, write to ${COMPANY.adminEmail}.
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+                  Please keep the asset UID available for any future reference regarding this device.
                 </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:24px 32px 28px;">
-                <p style="margin:0 0 4px;font-size:13px;color:#101828;">Regards,</p>
-                <p style="margin:0 0 2px;font-size:13px;font-weight:700;color:#101828;">Admin</p>
-                <p style="margin:0;font-size:13px;color:#101828;">${COMPANY.name}</p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 32px;background:#0A0D14;color:#D0D5DD;font-size:11px;line-height:1.6;">
-                ${COMPANY.legalName}<br />
-                ${COMPANY.address}<br />
-                ${COMPANY.adminEmail}
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">
+                  If any of the information above is incorrect, please contact the Cloutflow administration team.
+                </p>
+                <p style="margin:0;font-size:15px;line-height:1.6;">Regards,<br />Cloutflow Administration</p>
               </td>
             </tr>
           </table>
@@ -127,60 +180,126 @@ function htmlTemplate(mail: AllocationMail) {
 </html>`;
 }
 
-function textTemplate(mail: AllocationMail) {
-  return [
-    `Dear ${mail.employeeName},`,
-    "",
-    greetingLine(mail),
-    "",
-    `Asset: ${mail.assetName}`,
-    `UID: ${mail.uid}`,
-    `Employee: ${mail.employeeName}`,
-    `Department: ${mail.department}`,
-    `Position: ${mail.position}`,
-    `Official email: ${mail.employeeEmail}`,
-    `Date: ${formatDate(mail.allocatedAt)}`,
-    mail.brand ? `Brand: ${mail.brand}` : "",
-    mail.model ? `Model: ${mail.model}` : "",
-    mail.serialNumber ? `Serial number: ${mail.serialNumber}` : "",
-    "",
-    `If any detail above is incorrect, write to ${COMPANY.adminEmail}.`,
-    "",
-    "Regards,",
-    "Admin",
-    COMPANY.name,
-    COMPANY.legalName,
-    COMPANY.address,
-  ]
-    .filter(Boolean)
-    .join("\n");
+export function smtpAcceptedMessage(info: SendMailInfo) {
+  const accepted = normalizeAddresses(info.accepted);
+  const rejected = normalizeAddresses(info.rejected);
+  return accepted.length > 0 && rejected.length === 0;
 }
 
-export async function sendAllocationEmail(mail: AllocationMail) {
-  if (!smtpConfigured()) {
+function normalizeAddresses(value: unknown): string[] {
+  if (!value) return [];
+  const items = Array.isArray(value) ? value : [value];
+  return items
+    .map((item) => {
+      if (typeof item === "string") return item.trim().toLowerCase();
+      if (item && typeof item === "object" && "address" in item && typeof item.address === "string") {
+        return item.address.trim().toLowerCase();
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+export function sanitizeEmailError(error: unknown, env: EnvMap = process.env) {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const secrets = [env.SMTP_PASS, env.SMTP_USER, env.SMTP_FROM_EMAIL].filter(
+    (value): value is string => Boolean(value?.trim()),
+  );
+  let sanitized = raw.replace(/\s+/g, " ").trim();
+  for (const secret of secrets) {
+    sanitized = sanitized.split(secret).join("[redacted]");
+  }
+  sanitized = sanitized
+    .replace(/(pass(word)?|pwd|secret|api[_-]?key|smtp[_-]?key)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+    .replace(/AUTH\s+[^\s]+/gi, "AUTH [redacted]");
+
+  if (/EAUTH|invalid login|authentication failed|535/i.test(sanitized)) {
+    return "SMTP authentication failed.";
+  }
+  if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket/i.test(sanitized)) {
+    return "Could not reach the SMTP server.";
+  }
+  if (!sanitized) return "Email delivery failed.";
+  return sanitized.slice(0, 240);
+}
+
+export function createSmtpTransport(config: SmtpConfig) {
+  return nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: false,
+    requireTLS: true,
+    auth: {
+      user: config.user,
+      pass: config.pass,
+    },
+  } satisfies SMTPTransport.Options);
+}
+
+async function defaultReadLogo() {
+  const logoPath = path.join(process.cwd(), "public", "brand", "cloutflow-logo-color.png");
+  return readFile(logoPath);
+}
+
+export async function sendAllocationEmail(
+  mail: AllocationMail,
+  deps: {
+    env?: EnvMap;
+    sendMail?: SendMailFn;
+    readLogo?: () => Promise<Buffer>;
+  } = {},
+): Promise<SendAllocationEmailResult> {
+  const env = deps.env ?? process.env;
+  const smtp = getSmtpConfig(env);
+  if (!smtp.ok) {
+    return { sent: false, configured: false, error: smtp.error };
+  }
+
+  if (!isSendableEmployeeEmail(mail.employeeEmail)) {
     return {
       sent: false,
-      error: "Email was not sent because SMTP is not configured.",
+      configured: true,
+      error: "Acknowledgement email was not sent because the employee address is not a valid official email.",
     };
   }
 
-  const logoPath = path.join(process.cwd(), "public", "brand", "cloutflow-logo-white.png");
-  const logo = await readFile(logoPath);
+  try {
+    const sendMail =
+      deps.sendMail ??
+      (async (options) => {
+        const info = await createSmtpTransport(smtp.config).sendMail(options);
+        return info;
+      });
+    const logo = await (deps.readLogo ?? defaultReadLogo)();
+    const info = await sendMail({
+      from: `${smtp.config.fromName} <${smtp.config.fromEmail}>`,
+      to: mail.employeeEmail.trim().toLowerCase(),
+      subject: acknowledgementSubject(mail.uid),
+      text: textTemplate(mail),
+      html: htmlTemplate(mail),
+      attachments: [
+        {
+          filename: "cloutflow-logo.png",
+          content: logo,
+          cid: "cloutflow-logo",
+        },
+      ],
+    });
 
-  await transporter().sendMail({
-    from: process.env.SMTP_FROM || `Cloutflow Admin <${COMPANY.adminEmail}>`,
-    to: mail.employeeEmail,
-    subject: subjectFor(mail),
-    text: textTemplate(mail),
-    html: htmlTemplate(mail),
-    attachments: [
-      {
-        filename: "cloutflow-logo.png",
-        content: logo,
-        cid: "cloutflow-logo",
-      },
-    ],
-  });
+    if (!smtpAcceptedMessage(info)) {
+      return {
+        sent: false,
+        configured: true,
+        error: "The SMTP server did not accept the acknowledgement message.",
+      };
+    }
 
-  return { sent: true };
+    return { sent: true, messageId: info.messageId?.trim() || null };
+  } catch (error) {
+    return {
+      sent: false,
+      configured: true,
+      error: sanitizeEmailError(error, env),
+    };
+  }
 }

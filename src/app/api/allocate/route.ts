@@ -1,144 +1,56 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
-import { collectImages, saveAllocationImages } from "@/lib/media";
-import { createUniqueUid } from "@/lib/uid";
-import { generateQrDataUrl } from "@/lib/qr";
-import { sendAllocationEmail } from "@/lib/email";
-import { ALLOCATION_ACTION, ASSET_STATUS } from "@/lib/constants";
-import { isOfficialEmployeeEmail, OFFICIAL_EMAIL_HINT } from "@/lib/employee";
+import { sendAcknowledgementForAllocation } from "@/lib/acknowledgement";
+import { allocateAsset } from "@/lib/queries";
+import { normalizeUid } from "@/lib/utils";
 
 const fields = z.object({
-  assetTypeId: z.string().min(1),
-  employeeName: z.string().trim().min(2),
-  department: z.string().trim().min(2),
-  position: z.string().trim().min(2),
-  employeeEmail: z
-    .string()
-    .trim()
-    .email()
-    .refine(isOfficialEmployeeEmail, { message: OFFICIAL_EMAIL_HINT }),
-  brand: z.string().trim().optional(),
-  model: z.string().trim().optional(),
-  serialNumber: z.string().trim().optional(),
-  notes: z.string().trim().optional(),
+  uid: z.string().min(1),
+  employeeId: z.string().uuid(),
 });
 
 export async function POST(request: Request) {
-  if (!(await requireAdmin())) {
+  const admin = await requireAdmin();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const formData = await request.formData();
-  const parsed = fields.safeParse({
-    assetTypeId: formData.get("assetTypeId"),
-    employeeName: formData.get("employeeName"),
-    department: formData.get("department"),
-    position: formData.get("position"),
-    employeeEmail: formData.get("employeeEmail"),
-    brand: String(formData.get("brand") ?? "") || undefined,
-    model: String(formData.get("model") ?? "") || undefined,
-    serialNumber: String(formData.get("serialNumber") ?? "") || undefined,
-    notes: String(formData.get("notes") ?? "") || undefined,
-  });
-
+  const parsed = fields.safeParse(await request.json());
   if (!parsed.success) {
-    const emailIssue = parsed.error.issues.find((issue) => issue.path.includes("employeeEmail"));
     return NextResponse.json(
-      { error: emailIssue?.message || "Complete every required field with valid values." },
+      { error: "Select an available asset and an employee from the roster." },
       { status: 400 },
     );
   }
 
-  const images = collectImages(formData);
-  if (!images.length) {
-    return NextResponse.json({ error: "Upload at least one image of the allocated asset." }, { status: 400 });
-  }
+  const uid = normalizeUid(parsed.data.uid);
 
-  const assetType = await prisma.assetType.findUnique({
-    where: { id: parsed.data.assetTypeId },
-  });
-  if (!assetType) {
-    return NextResponse.json({ error: "Selected asset type was not found." }, { status: 404 });
-  }
-
-  const uid = await createUniqueUid();
-
-  const result = await prisma.$transaction(async (tx) => {
-    const asset = await tx.asset.create({
-      data: {
-        uid,
-        assetTypeId: assetType.id,
-        brand: parsed.data.brand,
-        model: parsed.data.model,
-        serialNumber: parsed.data.serialNumber,
-        notes: parsed.data.notes,
-        status: ASSET_STATUS.allocated,
-      },
-    });
-
-    const allocation = await tx.allocation.create({
-      data: {
-        assetId: asset.id,
-        employeeName: parsed.data.employeeName,
-        department: parsed.data.department,
-        position: parsed.data.position,
-        employeeEmail: parsed.data.employeeEmail.toLowerCase(),
-        action: ALLOCATION_ACTION.allocated,
-        isCurrent: true,
-      },
-    });
-
-    return { asset, allocation };
-  });
-
-  const savedImages = await saveAllocationImages(result.allocation.id, images);
-  if (savedImages.length) {
-    await prisma.assetImage.createMany({
-      data: savedImages.map((image) => ({
-        allocationId: result.allocation.id,
-        filename: image.filename,
-        mimeType: image.mimeType,
-      })),
-    });
-  }
-
-  let emailSent = false;
-  let emailError: string | undefined;
+  let result: Awaited<ReturnType<typeof allocateAsset>>;
   try {
-    const mail = await sendAllocationEmail({
-      employeeName: parsed.data.employeeName,
-      employeeEmail: parsed.data.employeeEmail,
-      department: parsed.data.department,
-      position: parsed.data.position,
-      assetName: assetType.name,
+    result = await allocateAsset(admin.supabase, {
       uid,
-      brand: parsed.data.brand,
-      model: parsed.data.model,
-      serialNumber: parsed.data.serialNumber,
-      action: "allocated",
-      allocatedAt: result.allocation.allocatedAt,
+      employeeId: parsed.data.employeeId,
     });
-    emailSent = mail.sent;
-    emailError = mail.error;
   } catch (error) {
-    emailError = error instanceof Error ? error.message : "Email delivery failed.";
+    const message = error instanceof Error ? error.message : "Allocation failed.";
+    const status = /not found/i.test(message) ? 404 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 
-  await prisma.allocation.update({
-    where: { id: result.allocation.id },
-    data: { emailSent, emailError },
-  });
-
-  const qrDataUrl = await generateQrDataUrl(uid);
+  const acknowledgement = await sendAcknowledgementForAllocation(
+    admin.supabase,
+    result.allocation.id,
+    admin.user.email ?? "",
+  );
 
   return NextResponse.json({
-    uid,
-    qrDataUrl,
-    emailSent,
-    emailError,
-    assetType: assetType.name,
-    employeeName: parsed.data.employeeName,
+    uid: result.asset.uid,
+    allocationId: result.allocation.id,
+    emailSent: acknowledgement.sent,
+    emailError: acknowledgement.error,
+    emailWarning: acknowledgement.adminMessage,
+    assetType: result.assetType.name,
+    employeeName: result.allocation.employee_name,
   });
 }

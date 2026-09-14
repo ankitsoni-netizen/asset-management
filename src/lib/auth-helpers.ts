@@ -1,14 +1,31 @@
-import { auth } from "@/auth";
-import { ADMIN_EMAIL } from "./constants";
+import { redirect } from "next/navigation";
+import { isAdminEmail } from "./constants";
+import { loginRedirectPath } from "./auth-path";
+import { createServerSupabaseClient } from "./supabase/server";
 
-export function isAdminEmail(email?: string | null) {
-  return email?.toLowerCase() === ADMIN_EMAIL;
-}
+export { isAdminEmail };
 
 export async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user?.email || !isAdminEmail(session.user.email)) {
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
     return null;
   }
-  return session;
+
+  if (!isAdminEmail(user.email)) {
+    await supabase.auth.signOut();
+    return null;
+  }
+
+  return { user, supabase };
+}
+
+export async function requireAdminPage(callbackUrl = "/") {
+  const admin = await requireAdmin();
+  if (admin) return admin;
+  redirect(loginRedirectPath(callbackUrl));
 }

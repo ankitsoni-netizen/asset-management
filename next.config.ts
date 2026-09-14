@@ -1,12 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["qrcode", "pngjs"],
+  serverExternalPackages: ["nodemailer"],
   turbopack: {
     root: process.cwd(),
-    resolveAlias: {
-      pngjs: "./node_modules/pngjs/lib/png.js",
-    },
   },
   images: {
     localPatterns: [
