@@ -35,6 +35,9 @@ export async function GET(request: Request) {
   if (!employee) {
     return NextResponse.json({ error: "No employee was found for this QR / email." }, { status: 404 });
   }
+  if (employee.disabled) {
+    return NextResponse.json({ error: "This employee is disabled and cannot receive assets." }, { status: 400 });
+  }
 
   return NextResponse.json({ employee });
 }

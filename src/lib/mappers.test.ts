@@ -46,10 +46,12 @@ test("maps employee roster rows without assets", () => {
     department: "Tech",
     position: "Engineer",
     code: "EMP-204",
+    disabled: false,
     created_at: "2026-09-11T10:00:00.000Z",
     updated_at: "2026-09-11T10:00:00.000Z",
   });
   assert.equal(employee.code, "EMP-204");
+  assert.equal(employee.disabled, false);
   assert.equal(employee.email, "jordan@cloutflow.com");
 });
 

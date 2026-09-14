@@ -54,6 +54,7 @@ export function mapEmployee(row: EmployeeRow): EmployeeRecord {
     department: row.department,
     position: row.position,
     code: row.code,
+    disabled: row.disabled,
     createdAt: asDate(row.created_at),
     updatedAt: asDate(row.updated_at),
   };

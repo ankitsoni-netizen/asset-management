@@ -127,12 +127,18 @@ export async function listAvailableAssets(): Promise<AssetRecord[]> {
   return listAssets({ status: ASSET_STATUS.available });
 }
 
-export async function listEmployees(filters: { q?: string; department?: string } = {}): Promise<EmployeeRecord[]> {
+export async function listEmployees(
+  filters: { q?: string; department?: string; disabled?: boolean } = {},
+): Promise<EmployeeRecord[]> {
   const supabase = await createServerSupabaseClient();
   let query = supabase.from("employees").select("*");
 
   if (filters.department) {
     query = query.eq("department", filters.department);
+  }
+
+  if (filters.disabled === true || filters.disabled === false) {
+    query = query.eq("disabled", filters.disabled);
   }
 
   const search = filters.q?.trim();
@@ -413,6 +419,27 @@ export async function createEmployee(
     throw new Error(error.message);
   }
 
+  return mapEmployee(data as EmployeeRow);
+}
+
+export async function setEmployeeDisabled(
+  supabase: Client,
+  id: string,
+  disabled: boolean,
+) {
+  const { data, error } = await supabase
+    .from("employees")
+    .update({ disabled })
+    .eq("id", id)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Employee was not found.");
+  }
   return mapEmployee(data as EmployeeRow);
 }
 

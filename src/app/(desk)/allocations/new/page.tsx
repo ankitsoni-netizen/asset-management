@@ -5,7 +5,7 @@ import { getDashboardStats, listAvailableAssets, listEmployees } from "@/lib/que
 export default async function NewAllocationPage() {
   const [assets, employees, stats] = await Promise.all([
     listAvailableAssets(),
-    listEmployees(),
+    listEmployees({ disabled: false }),
     getDashboardStats(),
   ]);
 

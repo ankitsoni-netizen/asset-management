@@ -303,6 +303,7 @@ export type Database = {
           code: string | null;
           created_at: string;
           department: string;
+          disabled: boolean;
           email: string;
           id: string;
           name: string;
@@ -313,6 +314,7 @@ export type Database = {
           code?: string | null;
           created_at?: string;
           department: string;
+          disabled?: boolean;
           email: string;
           id?: string;
           name: string;
@@ -323,6 +325,7 @@ export type Database = {
           code?: string | null;
           created_at?: string;
           department?: string;
+          disabled?: boolean;
           email?: string;
           id?: string;
           name?: string;

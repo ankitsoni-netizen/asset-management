@@ -31,6 +31,7 @@ export type EmployeeRecord = {
   department: string;
   position: string;
   code: string | null;
+  disabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
