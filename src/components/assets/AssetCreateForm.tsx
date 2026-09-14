@@ -65,6 +65,10 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
       setError("Scan or enter the QR / UID printed on the device.");
       return;
     }
+    if (!brand.trim() || !model.trim() || !serialNumber.trim()) {
+      setError("Enter brand, model, and serial number.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -151,24 +155,33 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <label className="block">
-            <span className="cf-label">Brand (optional)</span>
+            <span className="cf-label">
+              Brand <span className="text-red-600">*</span>
+            </span>
             <input
+              required
               value={brand}
               onChange={(event) => setBrand(event.target.value)}
               className="mt-2 h-12 w-full rounded-md border border-cf-border px-3 sm:h-11"
             />
           </label>
           <label className="block">
-            <span className="cf-label">Model (optional)</span>
+            <span className="cf-label">
+              Model <span className="text-red-600">*</span>
+            </span>
             <input
+              required
               value={model}
               onChange={(event) => setModel(event.target.value)}
               className="mt-2 h-12 w-full rounded-md border border-cf-border px-3 sm:h-11"
             />
           </label>
           <label className="block md:col-span-2">
-            <span className="cf-label">Serial number (optional)</span>
+            <span className="cf-label">
+              Serial number <span className="text-red-600">*</span>
+            </span>
             <input
+              required
               value={serialNumber}
               onChange={(event) => setSerialNumber(event.target.value)}
               className="mt-2 h-12 w-full rounded-md border border-cf-border px-3 sm:h-11"

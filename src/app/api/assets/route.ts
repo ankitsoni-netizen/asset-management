@@ -10,9 +10,9 @@ import { normalizeUid } from "@/lib/utils";
 const fields = z.object({
   uid: z.string().trim().min(1).max(120),
   assetTypeId: z.string().min(1),
-  brand: z.string().trim().optional(),
-  model: z.string().trim().optional(),
-  serialNumber: z.string().trim().optional(),
+  brand: z.string().trim().min(1),
+  model: z.string().trim().min(1),
+  serialNumber: z.string().trim().min(1),
   notes: z.string().trim().optional(),
 });
 
@@ -54,15 +54,22 @@ export async function POST(request: Request) {
   const parsed = fields.safeParse({
     uid: scannedAssetUid(String(formData.get("uid") ?? "")) ?? String(formData.get("uid") ?? ""),
     assetTypeId: formData.get("assetTypeId"),
-    brand: String(formData.get("brand") ?? "") || undefined,
-    model: String(formData.get("model") ?? "") || undefined,
-    serialNumber: String(formData.get("serialNumber") ?? "") || undefined,
+    brand: String(formData.get("brand") ?? ""),
+    model: String(formData.get("model") ?? ""),
+    serialNumber: String(formData.get("serialNumber") ?? ""),
     notes: String(formData.get("notes") ?? "") || undefined,
   });
 
   if (!parsed.success) {
+    const missingDetails = parsed.error.issues.some((issue) =>
+      ["brand", "model", "serialNumber"].includes(String(issue.path[0])),
+    );
     return NextResponse.json(
-      { error: "Scan or enter the printed QR / UID and choose an asset type." },
+      {
+        error: missingDetails
+          ? "Enter brand, model, and serial number."
+          : "Scan or enter the printed QR / UID and choose an asset type.",
+      },
       { status: 400 },
     );
   }
