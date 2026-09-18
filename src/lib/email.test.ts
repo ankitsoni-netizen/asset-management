@@ -112,8 +112,10 @@ test("omits unavailable brand, model, and serial lines", () => {
 
 test("accepts only official employee email addresses", () => {
   assert.equal(isSendableEmployeeEmail("jordan@cloutflow.com"), true);
+  assert.equal(isSendableEmployeeEmail("lead@thestage.club"), true);
   assert.equal(isSendableEmployeeEmail("n/a"), false);
   assert.equal(isSendableEmployeeEmail("someone@gmail.com"), false);
+  assert.equal(isSendableEmployeeEmail("lead@backstage.example"), false);
   assert.equal(isSendableEmployeeEmail(""), false);
 });
 

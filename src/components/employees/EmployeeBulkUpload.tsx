@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Download, Upload } from "lucide-react";
 import { useProcessing } from "@/components/status/Processing";
 import { EMPLOYEE_CSV_FILENAME, EMPLOYEE_CSV_SAMPLE_HEADER } from "@/lib/employee-csv";
+import { OFFICIAL_EMAIL_HINT } from "@/lib/employee";
 
 type FailedRow = {
   row: number;
@@ -90,8 +91,7 @@ export function EmployeeBulkUpload() {
         <section className="cf-card p-4 sm:p-6">
           <h2 className="text-lg font-medium">2. Upload the filled sheet</h2>
           <p className="mt-1 text-sm text-cf-muted">
-            Official emails must end with @cloutflow.com or @backstage. Existing email IDs and employee IDs are skipped
-            instead of overwriting the roster.
+            {OFFICIAL_EMAIL_HINT} Existing email IDs and employee IDs are skipped instead of overwriting the roster.
           </p>
           <label className="mt-5 flex min-h-[148px] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-cf-border bg-cf-soft px-4 py-10 text-center">
             <input
