@@ -106,7 +106,7 @@ export function AllocatedHolders({ holders }: { holders: AllocatedHolder[] }) {
         </p>
       ) : filtered.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-cf-muted sm:px-5">
-          No allocated assets match "{query.trim()}".
+          {`No allocated assets match "${query.trim()}".`}
         </p>
       ) : (
         <ul className="divide-y divide-cf-border">
