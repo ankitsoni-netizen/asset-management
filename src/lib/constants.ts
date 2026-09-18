@@ -22,6 +22,21 @@ export const ASSET_STATUS = {
   available: "available",
 } as const;
 
+export function parseAssetActive(value: unknown, fallback = true) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "inactive" || raw === "false" || raw === "0") return false;
+  if (raw === "active" || raw === "true" || raw === "1") return true;
+  return fallback;
+}
+
+export function assetActiveLabel(active: boolean) {
+  return active ? "Active" : "Inactive";
+}
+
+export function assetAssignmentLabel(status: string) {
+  return status === ASSET_STATUS.allocated ? "Allocated" : "Available";
+}
+
 export const ALLOCATION_ACTION = {
   allocated: "allocated",
   returned: "returned",

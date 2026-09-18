@@ -2,6 +2,7 @@ import { ASSET_STATUS } from "./constants";
 import { createServerSupabaseClient } from "./supabase/server";
 import type { Database } from "@/types/database";
 import {
+  asDate,
   asRow,
   mapAllocationWithAsset,
   mapAsset,
@@ -15,6 +16,7 @@ import type {
   AssetTypeRecord,
   EmployeeRecord,
 } from "./models";
+import { buildDashboardSummary, type AssignmentSummary, type DashboardSummary } from "./summary";
 
 type Client = Awaited<ReturnType<typeof createServerSupabaseClient>>;
 type AssetRow = Database["public"]["Tables"]["assets"]["Row"];
@@ -89,6 +91,7 @@ export async function listAssetTypes(): Promise<AssetTypeRecord[]> {
 export async function listAssets(filters: {
   q?: string;
   status?: string;
+  active?: string;
   assetTypeId?: string;
 } = {}): Promise<AssetRecord[]> {
   const supabase = await createServerSupabaseClient();
@@ -96,6 +99,11 @@ export async function listAssets(filters: {
 
   if (filters.status === ASSET_STATUS.allocated || filters.status === ASSET_STATUS.available) {
     query = query.eq("status", filters.status);
+  }
+  if (filters.active === "active") {
+    query = query.eq("active", true);
+  } else if (filters.active === "inactive") {
+    query = query.eq("active", false);
   }
   if (filters.assetTypeId) {
     query = query.eq("asset_type_id", filters.assetTypeId);
@@ -124,7 +132,7 @@ export async function listAssetUids(): Promise<string[]> {
 }
 
 export async function listAvailableAssets(): Promise<AssetRecord[]> {
-  return listAssets({ status: ASSET_STATUS.available });
+  return listAssets({ status: ASSET_STATUS.available, active: "active" });
 }
 
 export async function listEmployees(
@@ -188,9 +196,9 @@ export async function findEmployeeByCodeOrEmail(value: string): Promise<Employee
   return byCode ? mapEmployee(byCode) : null;
 }
 
-export async function getAssetByUid(uid: string): Promise<AssetRecord | null> {
+async function getAssetBy(column: "id" | "uid", value: string): Promise<AssetRecord | null> {
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.from("assets").select(ASSET_SELECT).eq("uid", uid).maybeSingle();
+  const { data, error } = await supabase.from("assets").select(ASSET_SELECT).eq(column, value).maybeSingle();
   throwIfError(error);
   if (!data) return null;
 
@@ -202,6 +210,30 @@ export async function getAssetByUid(uid: string): Promise<AssetRecord | null> {
   throwIfError(imageError);
 
   return mapJoinedAsset(data as never, images ?? []);
+}
+
+export async function getAssetByUid(uid: string): Promise<AssetRecord | null> {
+  return getAssetBy("uid", uid);
+}
+
+export async function getAssetById(id: string): Promise<AssetRecord | null> {
+  return getAssetBy("id", id);
+}
+
+export async function getCurrentAllocationForAsset(assetId: string) {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("allocations")
+    .select("employee_name, employee_email")
+    .eq("asset_id", assetId)
+    .eq("is_current", true)
+    .maybeSingle();
+  throwIfError(error);
+  if (!data) return null;
+  return {
+    name: data.employee_name,
+    email: data.employee_email,
+  };
 }
 
 export async function getDashboardStats() {
@@ -227,6 +259,146 @@ export async function getDashboardStats() {
     totalEmployees: totalEmployees.count ?? 0,
     currentAllocations: currentAllocations.count ?? 0,
   };
+}
+
+const SUMMARY_ASSET_SELECT = `
+  id,
+  uid,
+  status,
+  active,
+  brand,
+  model,
+  serial_number,
+  asset_type_id,
+  asset_types ( id, name )
+`;
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  const supabase = await createServerSupabaseClient();
+  const [assetsResult, employeesResult, allocationsResult] = await Promise.all([
+    supabase.from("assets").select(SUMMARY_ASSET_SELECT).order("uid", { ascending: true }).limit(5000),
+    supabase
+      .from("employees")
+      .select("id, name, email, department, position, disabled")
+      .order("name", { ascending: true })
+      .limit(5000),
+    supabase
+      .from("allocations")
+      .select("id, asset_id, employee_id, employee_name, employee_email, department, position, allocated_at")
+      .eq("is_current", true)
+      .order("allocated_at", { ascending: false })
+      .limit(5000),
+  ]);
+
+  throwIfError(assetsResult.error);
+  throwIfError(employeesResult.error);
+  throwIfError(allocationsResult.error);
+
+  const assets = (assetsResult.data ?? []).map((row) => {
+    const type = one(
+      (row as { asset_types?: { id: string; name: string } | { id: string; name: string }[] | null }).asset_types,
+    );
+    return {
+      id: row.id,
+      uid: row.uid,
+      status: row.status,
+      active: row.active,
+      brand: row.brand,
+      model: row.model,
+      serialNumber: row.serial_number,
+      assetTypeId: type?.id ?? row.asset_type_id,
+      assetTypeName: type?.name ?? "Unknown",
+    };
+  });
+
+  return buildDashboardSummary(
+    assets,
+    (employeesResult.data ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      department: row.department,
+      position: row.position,
+      disabled: row.disabled,
+    })),
+    (allocationsResult.data ?? []).map((row) => ({
+      id: row.id,
+      assetId: row.asset_id,
+      employeeId: row.employee_id,
+      employeeName: row.employee_name,
+      employeeEmail: row.employee_email,
+      department: row.department,
+      position: row.position,
+      allocatedAt: asDate(row.allocated_at),
+    })),
+  );
+}
+
+const CURRENT_ASSIGNMENT_SELECT = `
+  id,
+  asset_id,
+  employee_id,
+  employee_name,
+  employee_email,
+  department,
+  position,
+  allocated_at,
+  assets!inner (
+    id,
+    uid,
+    brand,
+    model,
+    serial_number,
+    asset_types ( id, name )
+  )
+`;
+
+export async function listCurrentAssignments(): Promise<AssignmentSummary[]> {
+  const supabase = await createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("allocations")
+    .select(CURRENT_ASSIGNMENT_SELECT)
+    .eq("is_current", true)
+    .order("allocated_at", { ascending: false })
+    .limit(5000);
+  throwIfError(error);
+
+  return (data ?? []).map((row) => {
+    const joined = row as {
+      assets?: {
+        id: string;
+        uid: string;
+        brand: string | null;
+        model: string | null;
+        serial_number: string | null;
+        asset_types?: { id: string; name: string } | { id: string; name: string }[] | null;
+      } | {
+        id: string;
+        uid: string;
+        brand: string | null;
+        model: string | null;
+        serial_number: string | null;
+        asset_types?: { id: string; name: string } | { id: string; name: string }[] | null;
+      }[] | null;
+    };
+    const asset = one(joined.assets);
+    const type = one(asset?.asset_types);
+    return {
+      allocationId: row.id,
+      assetId: row.asset_id,
+      uid: asset?.uid ?? "Unknown UID",
+      assetType: type?.name ?? "Unknown",
+      brand: asset?.brand ?? null,
+      model: asset?.model ?? null,
+      serialNumber: asset?.serial_number ?? null,
+      employeeId: row.employee_id,
+      employeeName: row.employee_name,
+      employeeEmail: row.employee_email,
+      department: row.department,
+      position: row.position,
+      allocatedAt: asDate(row.allocated_at),
+    };
+  });
 }
 
 function matchesQuery(row: AllocationWithAsset, q: string) {
@@ -357,6 +529,41 @@ export async function findOrCreateAssetType(name: string): Promise<{
   return { type: mapAssetType(data), created: true };
 }
 
+export async function updateAsset(
+  supabase: Client,
+  id: string,
+  input: {
+    assetTypeId: string;
+    brand: string;
+    model: string;
+    serialNumber: string;
+    notes?: string;
+    active: boolean;
+  },
+) {
+  const { data, error } = await supabase
+    .from("assets")
+    .update({
+      asset_type_id: input.assetTypeId,
+      brand: input.brand,
+      model: input.model,
+      serial_number: input.serialNumber,
+      notes: input.notes ?? null,
+      active: input.active,
+    })
+    .eq("id", id)
+    .select(ASSET_SELECT)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Asset was not found.");
+  }
+  return mapJoinedAsset(data as never);
+}
+
 export async function registerAsset(
   supabase: Client,
   input: {
@@ -366,6 +573,7 @@ export async function registerAsset(
     model?: string;
     serialNumber?: string;
     notes?: string;
+    active?: boolean;
   },
 ) {
   const { data, error } = await supabase.rpc("register_asset", {
@@ -375,6 +583,7 @@ export async function registerAsset(
     p_model: input.model ?? null,
     p_serial_number: input.serialNumber ?? null,
     p_notes: input.notes ?? null,
+    p_active: input.active ?? true,
   });
   throwIfError(error);
   const payload = asRow<{
@@ -420,6 +629,60 @@ export async function createEmployee(
   }
 
   return mapEmployee(data as EmployeeRow);
+}
+
+export async function updateEmployee(
+  supabase: Client,
+  id: string,
+  input: {
+    name: string;
+    email: string;
+    department: string;
+    position: string;
+    code?: string | null;
+    disabled?: boolean;
+  },
+) {
+  const patch: Database["public"]["Tables"]["employees"]["Update"] = {
+    name: input.name,
+    email: input.email,
+    department: input.department,
+    position: input.position,
+    code: input.code || null,
+  };
+  if (typeof input.disabled === "boolean") {
+    patch.disabled = input.disabled;
+  }
+
+  const { data, error } = await supabase.from("employees").update(patch).eq("id", id).select("*").maybeSingle();
+
+  if (error) {
+    if (/employees_email_key|employees_email_lower|duplicate key/i.test(error.message)) {
+      throw new Error("An employee with this email is already on the roster.");
+    }
+    if (/employees_code_idx|duplicate key/i.test(error.message)) {
+      throw new Error("An employee with this employee ID is already on the roster.");
+    }
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Employee was not found.");
+  }
+
+  const employee = mapEmployee(data as EmployeeRow);
+  const { error: allocationError } = await supabase
+    .from("allocations")
+    .update({
+      employee_name: employee.name,
+      department: employee.department,
+      position: employee.position,
+      employee_email: employee.email,
+    })
+    .eq("employee_id", id)
+    .eq("is_current", true);
+  throwIfError(allocationError);
+
+  return employee;
 }
 
 export async function setEmployeeDisabled(

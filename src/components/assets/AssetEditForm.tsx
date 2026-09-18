@@ -4,9 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Laptop, Plus } from "lucide-react";
 import { AssetImageField } from "@/components/forms/AssetImageField";
-import { QrScanField } from "@/components/scan/QrScanField";
 import { useProcessing } from "@/components/status/Processing";
-import { scannedAssetUid } from "@/lib/scan";
 
 type AssetType = {
   id: string;
@@ -14,19 +12,40 @@ type AssetType = {
   isCustom: boolean;
 };
 
-export function AssetCreateForm({ types }: { types: AssetType[] }) {
+type ExistingImage = {
+  id: string;
+  filename: string;
+};
+
+export function AssetEditForm({
+  asset,
+  types,
+}: {
+  asset: {
+    id: string;
+    uid: string;
+    assetTypeId: string;
+    brand: string;
+    model: string;
+    serialNumber: string;
+    notes: string;
+    status: string;
+    active: boolean;
+    images: ExistingImage[];
+  };
+  types: AssetType[];
+}) {
   const router = useRouter();
   const { run } = useProcessing();
   const [assetTypes, setAssetTypes] = useState(types);
-  const [assetTypeId, setAssetTypeId] = useState(types[0]?.id ?? "");
+  const [assetTypeId, setAssetTypeId] = useState(asset.assetTypeId);
   const [customName, setCustomName] = useState("");
   const [creatingType, setCreatingType] = useState(false);
-  const [uid, setUid] = useState("");
-  const [brand, setBrand] = useState("");
-  const [model, setModel] = useState("");
-  const [serialNumber, setSerialNumber] = useState("");
-  const [notes, setNotes] = useState("");
-  const [active, setActive] = useState(true);
+  const [brand, setBrand] = useState(asset.brand);
+  const [model, setModel] = useState(asset.model);
+  const [serialNumber, setSerialNumber] = useState(asset.serialNumber);
+  const [notes, setNotes] = useState(asset.notes);
+  const [active, setActive] = useState(asset.active);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -61,11 +80,6 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    const scannedUid = scannedAssetUid(uid);
-    if (!scannedUid) {
-      setError("Scan or enter the QR / UID printed on the device.");
-      return;
-    }
     if (!brand.trim() || !model.trim() || !serialNumber.trim()) {
       setError("Enter brand, model, and serial number.");
       return;
@@ -73,9 +87,8 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
     setSubmitting(true);
     setError("");
     try {
-      await run("Saving to inventory", async () => {
+      await run("Saving asset", async () => {
         const formData = new FormData();
-        formData.set("uid", scannedUid);
         formData.set("assetTypeId", assetTypeId);
         formData.set("brand", brand);
         formData.set("model", model);
@@ -87,14 +100,14 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
           formData.append("images", file, name);
         });
 
-        const response = await fetch("/api/assets", { method: "POST", body: formData });
+        const response = await fetch(`/api/assets/${asset.id}`, { method: "PATCH", body: formData });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Unable to save this asset.");
+        if (!response.ok) throw new Error(data.error || "Unable to update this asset.");
         router.push("/assets");
         router.refresh();
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save this asset.");
+      setError(err instanceof Error ? err.message : "Unable to update this asset.");
     } finally {
       setSubmitting(false);
     }
@@ -105,19 +118,12 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
       <section className="cf-card p-4 sm:p-6">
         <h2 className="text-lg font-medium">Printed QR / UID</h2>
         <p className="mt-1 text-sm text-cf-muted">
-          Each device already has its own QR. Scan that code to store the device in inventory. The panel does not
-          generate a UID.
+          The UID is printed on the device and cannot be changed here. Assignment still comes from Allocation.
         </p>
-        <div className="mt-5">
-          <QrScanField
-            required
-            label="Device QR / UID"
-            value={uid}
-            onChange={setUid}
-            onRawScan={(raw) => setUid(scannedAssetUid(raw) ?? raw)}
-            placeholder="Scan the sticker on the device"
-          />
-        </div>
+        <p className="mt-5 font-mono text-lg font-semibold tracking-[0.08em] break-all text-cf-primary">{asset.uid}</p>
+        <p className="mt-2 text-sm text-cf-muted">
+          {asset.status === "allocated" ? "Currently allocated" : "Available"}
+        </p>
       </section>
 
       <section className="cf-card p-4 sm:p-6">
@@ -218,14 +224,32 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
 
       <section className="cf-card p-4 sm:p-6">
         <h2 className="text-lg font-medium">Photos (optional)</h2>
-        <p className="mt-1 text-sm text-cf-muted">
-          Add as many inventory photographs as you need. Employee details are not stored here.
-        </p>
+        <p className="mt-1 text-sm text-cf-muted">Existing inventory photographs stay on the record. You can add more.</p>
+        {asset.images.length ? (
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {asset.images.map((image) => (
+              <a
+                key={image.id}
+                href={`/api/media/assets/${asset.id}/${image.filename}`}
+                target="_blank"
+                rel="noreferrer"
+                className="overflow-hidden rounded-lg border border-cf-border"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/media/assets/${asset.id}/${image.filename}`}
+                  alt="Inventory asset"
+                  className="h-28 w-full object-cover"
+                />
+              </a>
+            ))}
+          </div>
+        ) : null}
         <AssetImageField
           files={files}
           onChange={setFiles}
           className="mt-5"
-          hint="PNG, JPG, WEBP, GIF. Select several at once, or keep adding more angles."
+          hint="PNG, JPG, WEBP, GIF. Add more angles without replacing existing photos."
         />
       </section>
 
@@ -233,13 +257,22 @@ export function AssetCreateForm({ types }: { types: AssetType[] }) {
         <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="cf-action bg-cf-primary text-white hover:bg-cf-primary-dark disabled:opacity-60"
-      >
-        {submitting ? "Saving..." : "Add to inventory"}
-      </button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="cf-action bg-cf-primary text-white hover:bg-cf-primary-dark disabled:opacity-60"
+        >
+          {submitting ? "Saving..." : "Save changes"}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/assets")}
+          className="cf-action border border-cf-border"
+        >
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }

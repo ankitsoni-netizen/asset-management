@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { parseAssetActive } from "@/lib/constants";
 import { collectImages, registerAssetImages, saveAssetImages } from "@/lib/media";
 import { findAssetTypeById, getAssetByUid, registerAsset } from "@/lib/queries";
 import { scannedAssetUid } from "@/lib/scan";
@@ -14,6 +15,7 @@ const fields = z.object({
   model: z.string().trim().min(1),
   serialNumber: z.string().trim().min(1),
   notes: z.string().trim().optional(),
+  active: z.boolean(),
 });
 
 export async function GET(request: Request) {
@@ -39,6 +41,7 @@ export async function GET(request: Request) {
       brand: asset.brand,
       model: asset.model,
       serialNumber: asset.serialNumber,
+      active: asset.active,
       assetType: asset.assetType,
     },
   });
@@ -58,6 +61,7 @@ export async function POST(request: Request) {
     model: String(formData.get("model") ?? ""),
     serialNumber: String(formData.get("serialNumber") ?? ""),
     notes: String(formData.get("notes") ?? "") || undefined,
+    active: parseAssetActive(formData.get("active")),
   });
 
   if (!parsed.success) {

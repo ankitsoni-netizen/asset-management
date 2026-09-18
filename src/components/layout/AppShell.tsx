@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Boxes, Users, Link2, QrCode, LogOut, CircleUser } from "lucide-react";
+import { Boxes, Users, Link2, QrCode, LogOut, CircleUser, LayoutDashboard } from "lucide-react";
 import { signOut } from "@/lib/auth-actions";
 import { UidLookup } from "./UidLookup";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useProcessing } from "@/components/status/Processing";
 
 const NAV = [
+  { href: "/summary", label: "Summary", icon: LayoutDashboard },
   { href: "/assets", label: "Assets", icon: Boxes },
   { href: "/employees", label: "Employees", icon: Users },
   { href: "/allocations", label: "Allocation", icon: Link2 },
@@ -141,7 +142,7 @@ export function AppShell({
           keyboardOpen ? "hidden" : ""
         }`}
       >
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {NAV.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
@@ -149,7 +150,7 @@ export function AppShell({
                 key={item.href}
                 href={item.href}
                 prefetch
-                className={`flex min-h-[56px] flex-col items-center justify-center gap-1 px-2 text-[11px] font-medium ${
+                className={`flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 text-[10px] font-medium sm:px-2 sm:text-[11px] ${
                   active ? "text-cf-primary" : "text-cf-muted"
                 }`}
               >

@@ -2,19 +2,33 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DEPARTMENTS, isOfficialEmployeeEmail, OFFICIAL_EMAIL_HINT } from "@/lib/employee";
-import { DepartmentField, resolvedDepartment } from "@/components/forms/DepartmentField";
+import { isOfficialEmployeeEmail, OFFICIAL_EMAIL_HINT } from "@/lib/employee";
+import { DepartmentField, departmentFormState, resolvedDepartment } from "@/components/forms/DepartmentField";
 import { useProcessing } from "@/components/status/Processing";
 
-export function EmployeeCreateForm() {
+export function EmployeeEditForm({
+  employee,
+}: {
+  employee: {
+    id: string;
+    name: string;
+    email: string;
+    department: string;
+    position: string;
+    code: string;
+    disabled: boolean;
+  };
+}) {
   const router = useRouter();
   const { run } = useProcessing();
-  const [name, setName] = useState("");
-  const [department, setDepartment] = useState<string>(DEPARTMENTS[0]);
-  const [customDepartment, setCustomDepartment] = useState("");
-  const [position, setPosition] = useState("");
-  const [email, setEmail] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
+  const initialDepartment = departmentFormState(employee.department);
+  const [name, setName] = useState(employee.name);
+  const [department, setDepartment] = useState<string>(initialDepartment.department);
+  const [customDepartment, setCustomDepartment] = useState(initialDepartment.customDepartment);
+  const [position, setPosition] = useState(employee.position);
+  const [email, setEmail] = useState(employee.email);
+  const [employeeId, setEmployeeId] = useState(employee.code);
+  const [disabled, setDisabled] = useState(employee.disabled);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -33,8 +47,8 @@ export function EmployeeCreateForm() {
     setError("");
     try {
       await run("Saving employee", async () => {
-        const response = await fetch("/api/employees", {
-          method: "POST",
+        const response = await fetch(`/api/employees/${employee.id}`, {
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name,
@@ -42,15 +56,16 @@ export function EmployeeCreateForm() {
             position,
             email,
             employeeId: employeeId || undefined,
+            disabled,
           }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Unable to save this employee.");
+        if (!response.ok) throw new Error(data.error || "Unable to update this employee.");
         router.push("/employees");
         router.refresh();
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save this employee.");
+      setError(err instanceof Error ? err.message : "Unable to update this employee.");
     } finally {
       setSubmitting(false);
     }
@@ -107,6 +122,18 @@ export function EmployeeCreateForm() {
             />
             <span className="mt-1 block text-xs text-cf-muted">{OFFICIAL_EMAIL_HINT}</span>
           </label>
+          <label className="block">
+            <span className="cf-label">Status</span>
+            <select
+              value={disabled ? "disabled" : "active"}
+              onChange={(event) => setDisabled(event.target.value === "disabled")}
+              className="mt-2 h-12 w-full rounded-md border border-cf-border px-3 sm:h-11"
+            >
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+            </select>
+            <span className="mt-1 block text-xs text-cf-muted">Disabled people stay on the roster but cannot receive new assets.</span>
+          </label>
         </div>
       </section>
 
@@ -114,13 +141,18 @@ export function EmployeeCreateForm() {
         <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="cf-action bg-cf-primary text-white hover:bg-cf-primary-dark disabled:opacity-60"
-      >
-        {submitting ? "Saving..." : "Add to roster"}
-      </button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="cf-action bg-cf-primary text-white hover:bg-cf-primary-dark disabled:opacity-60"
+        >
+          {submitting ? "Saving..." : "Save changes"}
+        </button>
+        <button type="button" onClick={() => router.push("/employees")} className="cf-action border border-cf-border">
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }

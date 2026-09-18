@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { Pencil } from "lucide-react";
+import { assetActiveLabel, assetAssignmentLabel } from "@/lib/constants";
 import { formatDate } from "@/lib/utils";
 
 type ImageRecord = { id: string; filename: string };
@@ -9,6 +11,7 @@ export type AssetRecordData = {
   id: string;
   uid: string;
   status: string;
+  active: boolean;
   brand: string | null;
   model: string | null;
   serialNumber: string | null;
@@ -16,6 +19,7 @@ export type AssetRecordData = {
   createdAt: string;
   assetType: { name: string };
   images: ImageRecord[];
+  allocatedTo: { name: string; email: string } | null;
 };
 
 export function AssetRecord({ asset }: { asset: AssetRecordData }) {
@@ -29,8 +33,13 @@ export function AssetRecord({ asset }: { asset: AssetRecordData }) {
           {asset.brand ? ` · ${asset.brand}` : ""}
           {asset.model ? ` ${asset.model}` : ""}
         </p>
-        <div className="mt-4 inline-flex rounded-full bg-cf-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em]">
-          {asset.status === "allocated" ? "Allocated" : "Available"}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <div className="inline-flex rounded-full bg-cf-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em]">
+            {assetActiveLabel(asset.active)}
+          </div>
+          <div className="inline-flex rounded-full bg-cf-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em]">
+            {assetAssignmentLabel(asset.status)}
+          </div>
         </div>
 
         <div className="mt-8 grid gap-4 border-t border-cf-border pt-6 md:grid-cols-2 lg:grid-cols-4">
@@ -39,21 +48,37 @@ export function AssetRecord({ asset }: { asset: AssetRecordData }) {
           <Field label="Model" value={asset.model || "—"} />
           <Field label="Serial number" value={asset.serialNumber || "—"} />
           <Field label="Added" value={formatDate(asset.createdAt)} />
-          <Field label="Status" value={asset.status === "allocated" ? "Allocated" : "Available"} />
+          <Field label="Status" value={assetActiveLabel(asset.active)} />
+          <Field label="Assignment" value={assetAssignmentLabel(asset.status)} />
+          <div>
+            <p className="cf-label">Allocated to</p>
+            {asset.allocatedTo ? (
+              <ContactTag name={asset.allocatedTo.name} email={asset.allocatedTo.email} />
+            ) : (
+              <p className="mt-1 text-sm font-medium">—</p>
+            )}
+          </div>
           <Field label="Notes" value={asset.notes || "—"} />
         </div>
 
         <p className="mt-6 text-sm text-cf-muted">
-          Employee mapping is not shown here. Open Allocation to attach or remove this device.
+          Open Allocation to attach or remove this device.
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Link
+            href={`/assets/${asset.id}/edit`}
+            className="cf-action border border-cf-border"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit asset
+          </Link>
           <Link
             href="/allocations"
             className="cf-action bg-cf-primary text-white"
           >
             Open allocation
           </Link>
-          {asset.status === "available" ? (
+          {asset.status === "available" && asset.active ? (
             <Link
               href="/allocations/new"
               className="cf-action border border-cf-border"
@@ -96,6 +121,23 @@ function Field({ label, value }: { label: string; value: string }) {
     <div>
       <p className="cf-label">{label}</p>
       <p className="mt-1 text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
+function ContactTag({ name, email }: { name: string; email: string }) {
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  return (
+    <div className="mt-1 inline-flex max-w-full items-center gap-2 rounded-full border border-cf-border bg-cf-soft py-1 pl-1 pr-3">
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cf-primary text-sm font-semibold text-white">
+        {initial}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium leading-tight">{name}</span>
+        <a href={`mailto:${email}`} className="block truncate text-xs leading-tight text-cf-muted hover:text-cf-primary">
+          {email}
+        </a>
+      </span>
     </div>
   );
 }

@@ -50,3 +50,10 @@ export function DepartmentField({
 export function resolvedDepartment(department: string, customDepartment: string) {
   return department === CUSTOM_DEPARTMENT ? customDepartment.trim() : department;
 }
+
+export function departmentFormState(value: string) {
+  if ((DEPARTMENTS as readonly string[]).includes(value)) {
+    return { department: value, customDepartment: "" };
+  }
+  return { department: CUSTOM_DEPARTMENT, customDepartment: value };
+}

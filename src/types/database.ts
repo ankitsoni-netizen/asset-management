@@ -168,6 +168,7 @@ export type Database = {
       };
       assets: {
         Row: {
+          active: boolean;
           asset_type_id: string;
           brand: string | null;
           created_at: string;
@@ -180,6 +181,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          active?: boolean;
           asset_type_id: string;
           brand?: string | null;
           created_at?: string;
@@ -192,6 +194,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          active?: boolean;
           asset_type_id?: string;
           brand?: string | null;
           created_at?: string;
@@ -356,6 +359,7 @@ export type Database = {
       };
       register_asset: {
         Args: {
+          p_active?: boolean;
           p_asset_type_id: string;
           p_brand?: string | null;
           p_model?: string | null;

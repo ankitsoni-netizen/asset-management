@@ -4,7 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Upload } from "lucide-react";
 import { useProcessing } from "@/components/status/Processing";
-import { EMPLOYEE_CSV_FILENAME } from "@/lib/employee-csv";
+import { EMPLOYEE_CSV_FILENAME, EMPLOYEE_CSV_SAMPLE_HEADER } from "@/lib/employee-csv";
 
 type FailedRow = {
   row: number;
@@ -49,6 +49,9 @@ export function EmployeeBulkUpload() {
         if (!response.ok && !(data.created > 0) && !failed.length) {
           throw new Error(data.error || "Unable to upload this sheet.");
         }
+        if (!response.ok && !(data.created > 0) && failed.length && data.error) {
+          setError(data.error);
+        }
         if (data.created > 0) router.refresh();
       });
     } catch (err) {
@@ -63,8 +66,8 @@ export function EmployeeBulkUpload() {
       <section className="cf-card p-4 sm:p-6">
         <h2 className="text-lg font-medium">1. Download the sample sheet</h2>
         <p className="mt-1 text-sm text-cf-muted">
-          Use this CSV as the template. Keep the header row, then add one employee per line. Employee ID is
-          optional. Open it in Excel or Google Sheets and save it again as CSV before uploading.
+          Use this CSV as the template. Required columns are First Name, Position, Email ID, and Department.
+          Employee ID is optional. Open it in Excel or Google Sheets and save it again as CSV before uploading.
         </p>
         <button
           type="button"
@@ -77,7 +80,9 @@ export function EmployeeBulkUpload() {
           Download sample CSV
         </button>
         <div className="mt-5 overflow-x-auto rounded-lg bg-cf-soft px-4 py-3 font-mono text-xs text-cf-muted">
-          name,email,department,position,employee_id
+          <div>{EMPLOYEE_CSV_SAMPLE_HEADER}</div>
+          <div>Jordan,Engineer,jordan@cloutflow.com,Tech,EMP-204</div>
+          <div>Alex,Analyst,alex@cloutflow.com,Finance,</div>
         </div>
       </section>
 
@@ -85,7 +90,7 @@ export function EmployeeBulkUpload() {
         <section className="cf-card p-4 sm:p-6">
           <h2 className="text-lg font-medium">2. Upload the filled sheet</h2>
           <p className="mt-1 text-sm text-cf-muted">
-            Official emails must end with @cloutflow.com or @backstage. Existing emails and employee IDs are skipped
+            Official emails must end with @cloutflow.com or @backstage. Existing email IDs and employee IDs are skipped
             instead of overwriting the roster.
           </p>
           <label className="mt-5 flex min-h-[148px] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-cf-border bg-cf-soft px-4 py-10 text-center">

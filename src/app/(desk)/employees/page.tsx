@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { Plus, Upload } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { EmployeeStatusButton } from "@/components/employees/EmployeeStatusButton";
-import { getFilterOptions, listEmployees } from "@/lib/queries";
-import { formatDate } from "@/lib/utils";
+import { EmployeeRoster, type EmployeeRosterAsset } from "@/components/employees/EmployeeRoster";
+import { getFilterOptions, listCurrentAssignments, listEmployees } from "@/lib/queries";
 
 export default async function EmployeesPage({
   searchParams,
@@ -13,17 +12,33 @@ export default async function EmployeesPage({
   const filters = await searchParams;
   const disabled =
     filters.status === "disabled" ? true : filters.status === "active" ? false : undefined;
-  const [employees, options] = await Promise.all([
+  const [employees, options, assignments] = await Promise.all([
     listEmployees({ q: filters.q, department: filters.department, disabled }),
     getFilterOptions(),
+    listCurrentAssignments(),
   ]);
+
+  const assetsByEmployeeId: Record<string, EmployeeRosterAsset[]> = {};
+  for (const row of assignments) {
+    const current = assetsByEmployeeId[row.employeeId] ?? [];
+    current.push({
+      allocationId: row.allocationId,
+      uid: row.uid,
+      assetType: row.assetType,
+      brand: row.brand,
+      model: row.model,
+      serialNumber: row.serialNumber,
+      allocatedAt: row.allocatedAt.toISOString(),
+    });
+    assetsByEmployeeId[row.employeeId] = current;
+  }
 
   return (
     <>
       <PageHeader
         eyebrow="Roster"
         title="Employees"
-        description="People who can receive company hardware. Disable someone to keep them on the roster without allowing new allocations."
+        description="People who can receive company hardware. Open a row to see every detail and every asset currently held. Disable someone to keep them on the roster without allowing new allocations."
         actions={
           <>
             <Link href="/employees/bulk" className="cf-action border border-cf-border">
@@ -87,73 +102,20 @@ export default async function EmployeesPage({
           .
         </div>
       ) : (
-        <>
-          <ul className="space-y-3 lg:hidden">
-            {employees.map((employee) => (
-              <li key={employee.id} className={`cf-card p-4 ${employee.disabled ? "opacity-70" : ""}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{employee.name}</p>
-                    <p className="mt-1 break-all text-sm text-cf-muted">{employee.email}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-cf-soft px-2 py-1 text-xs">
-                    {employee.disabled ? "Disabled" : "Active"}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-cf-muted">
-                  {employee.department} · {employee.position}
-                </p>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="font-mono text-xs text-cf-muted">{employee.code || "No employee ID"}</span>
-                  <EmployeeStatusButton id={employee.id} name={employee.name} disabled={employee.disabled} />
-                </div>
-                <p className="mt-2 text-xs text-cf-muted">{formatDate(employee.createdAt)}</p>
-              </li>
-            ))}
-          </ul>
-
-          <div className="cf-card hidden overflow-hidden lg:block">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-cf-soft text-xs uppercase tracking-[0.08em] text-cf-muted">
-                  <tr>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Email</th>
-                    <th className="px-4 py-3">Department</th>
-                    <th className="px-4 py-3">Position</th>
-                    <th className="px-4 py-3">Employee ID</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Added</th>
-                    <th className="px-4 py-3"> </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employees.map((employee) => (
-                    <tr
-                      key={employee.id}
-                      className={`border-t border-cf-border ${employee.disabled ? "bg-cf-soft/40" : ""}`}
-                    >
-                      <td className="px-4 py-3 font-medium">{employee.name}</td>
-                      <td className="px-4 py-3">{employee.email}</td>
-                      <td className="px-4 py-3">{employee.department}</td>
-                      <td className="px-4 py-3">{employee.position}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{employee.code || "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className="rounded-full bg-cf-soft px-2 py-1 text-xs">
-                          {employee.disabled ? "Disabled" : "Active"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(employee.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <EmployeeStatusButton id={employee.id} name={employee.name} disabled={employee.disabled} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
+        <EmployeeRoster
+          employees={employees.map((employee) => ({
+            id: employee.id,
+            name: employee.name,
+            email: employee.email,
+            department: employee.department,
+            position: employee.position,
+            code: employee.code,
+            disabled: employee.disabled,
+            createdAt: employee.createdAt.toISOString(),
+            updatedAt: employee.updatedAt.toISOString(),
+          }))}
+          assetsByEmployeeId={assetsByEmployeeId}
+        />
       )}
     </>
   );

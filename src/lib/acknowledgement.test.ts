@@ -59,6 +59,7 @@ function assetRow(overrides: Partial<AssetRow> = {}): AssetRow {
     serial_number: "C02X123",
     notes: null,
     status: "allocated",
+    active: true,
     created_at: "2026-09-11T10:00:00.000Z",
     updated_at: "2026-09-11T10:00:00.000Z",
     ...overrides,

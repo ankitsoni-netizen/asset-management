@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth-helpers";
-import { parseEmployeeCsv } from "@/lib/employee-csv";
+import { decodeCsvBytes, parseEmployeeCsv } from "@/lib/employee-csv";
 import { createEmployeesBulk } from "@/lib/queries";
 
 export async function POST(request: Request) {
@@ -15,12 +15,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Choose a CSV file to upload." }, { status: 400 });
   }
 
-  const name = file.name.toLowerCase();
-  if (name && !name.endsWith(".csv") && file.type && !/csv|excel|plain|octet-stream/i.test(file.type)) {
-    return NextResponse.json({ error: "Upload a CSV file. Download the sample sheet if you need the format." }, { status: 400 });
+  if (/\.(xlsx|xls|numbers|ods)$/i.test(file.name)) {
+    return NextResponse.json(
+      { error: "Upload a CSV file. In Excel or Google Sheets, use File → Save As / Download → CSV UTF-8." },
+      { status: 400 },
+    );
   }
 
-  const text = await file.text();
+  let text = "";
+  try {
+    text = decodeCsvBytes(await file.arrayBuffer());
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to read this CSV file." },
+      { status: 400 },
+    );
+  }
+
   const parsed = parseEmployeeCsv(text);
   if (!parsed.rows.length) {
     return NextResponse.json(

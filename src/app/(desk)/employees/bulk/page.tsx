@@ -7,7 +7,7 @@ export default function BulkEmployeesPage() {
       <PageHeader
         eyebrow="Roster"
         title="Bulk upload employees"
-        description="Download the sample CSV, fill one employee per row, then upload it. Asset details are not part of this sheet."
+        description="Required columns are first name, position, email ID, and department. Employee ID is optional."
       />
       <EmployeeBulkUpload />
     </>

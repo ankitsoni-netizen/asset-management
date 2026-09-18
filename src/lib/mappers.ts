@@ -122,6 +122,7 @@ export function mapAsset(
     serialNumber: row.serial_number,
     notes: row.notes,
     status: row.status,
+    active: row.active,
     createdAt: asDate(row.created_at),
     updatedAt: asDate(row.updated_at),
     assetType: mapAssetType(assetType),

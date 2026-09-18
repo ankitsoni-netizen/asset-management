@@ -68,6 +68,7 @@ export type AssetRecord = {
   serialNumber: string | null;
   notes: string | null;
   status: AssetStatus;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
   assetType: AssetTypeRecord;
