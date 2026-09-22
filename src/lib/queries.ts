@@ -1,4 +1,5 @@
 import { ASSET_STATUS } from "./constants";
+import { isParkingType } from "./parking";
 import { createServerSupabaseClient } from "./supabase/server";
 import type { Database } from "@/types/database";
 import {
@@ -8,6 +9,7 @@ import {
   mapAsset,
   mapAssetType,
   mapEmployee,
+  mapParkingAllocationWithSpot,
   one,
 } from "./mappers";
 import type {
@@ -15,6 +17,7 @@ import type {
   AssetRecord,
   AssetTypeRecord,
   EmployeeRecord,
+  ParkingAllocationWithSpot,
 } from "./models";
 import { buildDashboardSummary, type AssignmentSummary, type DashboardSummary } from "./summary";
 
@@ -25,6 +28,8 @@ type AllocationRow = Database["public"]["Tables"]["allocations"]["Row"];
 type ImageRow = Database["public"]["Tables"]["allocation_images"]["Row"];
 type AssetImageRow = Database["public"]["Tables"]["asset_images"]["Row"];
 type EmployeeRow = Database["public"]["Tables"]["employees"]["Row"];
+type ParkingSpotRow = Database["public"]["Tables"]["parking_spots"]["Row"];
+type ParkingAllocationRow = Database["public"]["Tables"]["parking_allocations"]["Row"];
 
 const ALLOCATION_SELECT = `
   *,
@@ -38,6 +43,11 @@ const ALLOCATION_SELECT = `
 const ASSET_SELECT = `
   *,
   asset_types (*)
+`;
+
+const PARKING_ALLOCATION_SELECT = `
+  *,
+  parking_spots!inner (*)
 `;
 
 function throwIfError(error: { message: string } | null) {
@@ -682,6 +692,18 @@ export async function updateEmployee(
     .eq("is_current", true);
   throwIfError(allocationError);
 
+  const { error: parkingError } = await supabase
+    .from("parking_allocations")
+    .update({
+      employee_name: employee.name,
+      department: employee.department,
+      position: employee.position,
+      employee_email: employee.email,
+    })
+    .eq("employee_id", id)
+    .eq("is_current", true);
+  throwIfError(parkingError);
+
   return employee;
 }
 
@@ -769,5 +791,116 @@ export async function allocateAsset(
 
 export async function returnAsset(supabase: Client, uid: string) {
   const { error } = await supabase.rpc("return_asset", { p_uid: uid });
+  throwIfError(error);
+}
+
+function mapJoinedParkingAllocation(row: {
+  parking_spots: ParkingSpotRow | ParkingSpotRow[] | null;
+} & ParkingAllocationRow): ParkingAllocationWithSpot {
+  const spot = one(row.parking_spots);
+  if (!spot) {
+    throw new Error("Parking allocation is missing its spot.");
+  }
+  return mapParkingAllocationWithSpot(row, spot);
+}
+
+function matchesParkingQuery(row: ParkingAllocationWithSpot, q: string) {
+  const needle = q.trim().toLowerCase();
+  return (
+    row.employeeName.toLowerCase().includes(needle) ||
+    row.employeeEmail.toLowerCase().includes(needle) ||
+    row.position.toLowerCase().includes(needle) ||
+    row.department.toLowerCase().includes(needle) ||
+    (row.parkingSpot.slotNumber ?? "").toLowerCase().includes(needle) ||
+    row.parkingSpot.parkingType.toLowerCase().includes(needle) ||
+    row.vehicleNumbers.some((vehicle) => vehicle.toLowerCase().includes(needle))
+  );
+}
+
+export async function getParkingLogs(filters: {
+  q?: string;
+  status?: string;
+  parkingType?: string;
+  department?: string;
+  from?: string;
+  to?: string;
+}): Promise<ParkingAllocationWithSpot[]> {
+  const supabase = await createServerSupabaseClient();
+  let query = supabase.from("parking_allocations").select(PARKING_ALLOCATION_SELECT);
+
+  if (filters.status === "allocated") {
+    query = query.eq("is_current", true);
+  } else if (filters.status === "historical") {
+    query = query.eq("is_current", false);
+  }
+
+  if (filters.parkingType && isParkingType(filters.parkingType)) {
+    query = query.eq("parking_spots.parking_type", filters.parkingType);
+  }
+
+  if (filters.department) {
+    query = query.eq("department", filters.department);
+  }
+
+  if (filters.from) {
+    query = query.gte("allocated_at", new Date(`${filters.from}T00:00:00`).toISOString());
+  }
+
+  if (filters.to) {
+    query = query.lte("allocated_at", new Date(`${filters.to}T23:59:59`).toISOString());
+  }
+
+  const search = filters.q?.trim();
+  if (search) {
+    const safe = search.replace(/[%_,()]/g, " ").slice(0, 80);
+    if (safe) {
+      query = query.or(
+        `employee_name.ilike.%${safe}%,employee_email.ilike.%${safe}%,department.ilike.%${safe}%,position.ilike.%${safe}%`,
+      );
+    }
+  }
+
+  const { data, error } = await query.order("allocated_at", { ascending: false }).limit(300);
+  throwIfError(error);
+
+  const rows = (data ?? []).map((row) => mapJoinedParkingAllocation(row as never));
+  if (!filters.q?.trim()) return rows;
+  return rows.filter((row) => matchesParkingQuery(row, filters.q!));
+}
+
+export async function listCurrentParkingAssignments(): Promise<ParkingAllocationWithSpot[]> {
+  return getParkingLogs({ status: "allocated" });
+}
+
+export async function allocateParking(
+  supabase: Client,
+  input: {
+    parkingType: ParkingAllocationWithSpot["parkingSpot"]["parkingType"];
+    slotNumber?: string | null;
+    vehicleNumbers: string[];
+    employeeId: string;
+  },
+) {
+  const { data, error } = await supabase.rpc("allocate_parking", {
+    p_parking_type: input.parkingType,
+    p_slot_number: input.slotNumber ?? null,
+    p_vehicle_numbers: input.vehicleNumbers,
+    p_employee_id: input.employeeId,
+  });
+  throwIfError(error);
+  const payload = asRow<{
+    parkingSpot: ParkingSpotRow;
+    allocation: ParkingAllocationRow;
+    employee: EmployeeRow;
+  }>(data);
+  return {
+    parkingSpot: payload.parkingSpot,
+    allocation: payload.allocation,
+    employee: payload.employee,
+  };
+}
+
+export async function returnParking(supabase: Client, parkingSpotId: string) {
+  const { error } = await supabase.rpc("return_parking", { p_parking_spot_id: parkingSpotId });
   throwIfError(error);
 }

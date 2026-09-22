@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { Plus, Upload } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { EmployeeRoster, type EmployeeRosterAsset } from "@/components/employees/EmployeeRoster";
-import { getFilterOptions, listCurrentAssignments, listEmployees } from "@/lib/queries";
+import {
+  EmployeeRoster,
+  type EmployeeRosterAsset,
+  type EmployeeRosterParking,
+} from "@/components/employees/EmployeeRoster";
+import { getFilterOptions, listCurrentAssignments, listCurrentParkingAssignments, listEmployees } from "@/lib/queries";
 
 export default async function EmployeesPage({
   searchParams,
@@ -12,10 +16,11 @@ export default async function EmployeesPage({
   const filters = await searchParams;
   const disabled =
     filters.status === "disabled" ? true : filters.status === "active" ? false : undefined;
-  const [employees, options, assignments] = await Promise.all([
+  const [employees, options, assignments, parkingAssignments] = await Promise.all([
     listEmployees({ q: filters.q, department: filters.department, disabled }),
     getFilterOptions(),
     listCurrentAssignments(),
+    listCurrentParkingAssignments(),
   ]);
 
   const assetsByEmployeeId: Record<string, EmployeeRosterAsset[]> = {};
@@ -31,6 +36,19 @@ export default async function EmployeesPage({
       allocatedAt: row.allocatedAt.toISOString(),
     });
     assetsByEmployeeId[row.employeeId] = current;
+  }
+
+  const parkingByEmployeeId: Record<string, EmployeeRosterParking[]> = {};
+  for (const row of parkingAssignments) {
+    const current = parkingByEmployeeId[row.employeeId] ?? [];
+    current.push({
+      allocationId: row.id,
+      parkingType: row.parkingSpot.parkingType,
+      slotNumber: row.parkingSpot.slotNumber,
+      vehicleNumbers: row.vehicleNumbers,
+      allocatedAt: row.allocatedAt.toISOString(),
+    });
+    parkingByEmployeeId[row.employeeId] = current;
   }
 
   return (
@@ -115,6 +133,7 @@ export default async function EmployeesPage({
             updatedAt: employee.updatedAt.toISOString(),
           }))}
           assetsByEmployeeId={assetsByEmployeeId}
+          parkingByEmployeeId={parkingByEmployeeId}
         />
       )}
     </>

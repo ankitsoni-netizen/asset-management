@@ -5,6 +5,8 @@ TRUNCATE TABLE
   public.allocation_images,
   public.asset_images,
   public.audit_logs,
+  public.parking_allocations,
+  public.parking_spots,
   public.allocations,
   public.assets,
   public.employees

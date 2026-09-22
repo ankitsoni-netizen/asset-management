@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildDashboardSummary, filterHolders } from "./summary";
+import { buildDashboardSummary, filterHolders, mergeParkingIntoHolders } from "./summary";
 
 const laptop = {
   id: "asset-1",
@@ -296,5 +296,77 @@ test("keeps every asset on a person match, but only matching assets for UID sear
   assert.deepEqual(
     filterHolders(summary.holders, "MacBook")[0]?.assets.map((asset) => asset.uid),
     [laptop.uid],
+  );
+});
+
+test("adds parking tags to holders and includes people who only have parking", () => {
+  const allocatedAt = new Date("2026-09-18T08:00:00.000Z");
+  const summary = buildDashboardSummary(
+    [laptop],
+    [jordan, rina],
+    [
+      {
+        id: "alloc-1",
+        assetId: laptop.id,
+        employeeId: jordan.id,
+        employeeName: jordan.name,
+        employeeEmail: jordan.email,
+        department: jordan.department,
+        position: jordan.position,
+        allocatedAt,
+      },
+    ],
+  );
+
+  const holders = mergeParkingIntoHolders(summary.holders, [
+    {
+      allocationId: "park-1",
+      parkingType: "valet",
+      slotNumber: null,
+      vehicleNumbers: ["HR26AB1234"],
+      employeeId: jordan.id,
+      employeeName: jordan.name,
+      employeeEmail: jordan.email,
+      department: jordan.department,
+      position: jordan.position,
+      allocatedAt: new Date("2026-09-18T10:00:00.000Z"),
+    },
+    {
+      allocationId: "park-2",
+      parkingType: "basement_1",
+      slotNumber: "A-12",
+      vehicleNumbers: ["DL1C0001"],
+      employeeId: rina.id,
+      employeeName: rina.name,
+      employeeEmail: rina.email,
+      department: rina.department,
+      position: rina.position,
+      allocatedAt: new Date("2026-09-18T11:00:00.000Z"),
+    },
+  ]);
+
+  assert.deepEqual(
+    holders.map((holder) => ({
+      name: holder.employeeName,
+      uids: holder.assets.map((asset) => asset.uid),
+      parking: holder.parking.map((row) => row.parkingType),
+    })),
+    [
+      { name: jordan.name, uids: [laptop.uid], parking: ["valet"] },
+      { name: rina.name, uids: [], parking: ["basement_1"] },
+    ],
+  );
+
+  assert.deepEqual(
+    filterHolders(holders, "valet").map((holder) => holder.employeeName),
+    [jordan.name],
+  );
+  assert.deepEqual(
+    filterHolders(holders, "A-12").map((holder) => holder.employeeName),
+    [rina.name],
+  );
+  assert.deepEqual(
+    filterHolders(holders, "HR26AB1234")[0]?.parking.map((row) => row.parkingType),
+    ["valet"],
   );
 });

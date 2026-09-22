@@ -8,6 +8,9 @@ import type {
   AssetTypeRecord,
   EmailDeliveryStatus,
   EmployeeRecord,
+  ParkingAllocationRecord,
+  ParkingAllocationWithSpot,
+  ParkingSpotRecord,
 } from "./models";
 
 type AssetTypeRow = Database["public"]["Tables"]["asset_types"]["Row"];
@@ -16,6 +19,8 @@ type AllocationRow = Database["public"]["Tables"]["allocations"]["Row"];
 type AllocationImageRow = Database["public"]["Tables"]["allocation_images"]["Row"];
 type AssetImageRow = Database["public"]["Tables"]["asset_images"]["Row"];
 type EmployeeRow = Database["public"]["Tables"]["employees"]["Row"];
+type ParkingSpotRow = Database["public"]["Tables"]["parking_spots"]["Row"];
+type ParkingAllocationRow = Database["public"]["Tables"]["parking_allocations"]["Row"];
 
 export function asDate(value: string | Date | null | undefined): Date {
   if (value instanceof Date) return value;
@@ -158,5 +163,45 @@ export function mapAllocationWithAsset(
       model: asset.model,
       assetType: mapAssetType(assetType),
     },
+  };
+}
+
+export function mapParkingSpot(row: ParkingSpotRow): ParkingSpotRecord {
+  return {
+    id: row.id,
+    parkingType: row.parking_type,
+    slotNumber: row.slot_number,
+    status: row.status,
+    createdAt: asDate(row.created_at),
+    updatedAt: asDate(row.updated_at),
+  };
+}
+
+export function mapParkingAllocation(row: ParkingAllocationRow): ParkingAllocationRecord {
+  return {
+    id: row.id,
+    parkingSpotId: row.parking_spot_id,
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    department: row.department,
+    position: row.position,
+    employeeEmail: row.employee_email,
+    vehicleNumbers: row.vehicle_numbers ?? [],
+    action: row.action,
+    allocatedAt: asDate(row.allocated_at),
+    endedAt: asDateOrNull(row.ended_at),
+    isCurrent: row.is_current,
+    createdAt: asDate(row.created_at),
+    updatedAt: asDate(row.updated_at),
+  };
+}
+
+export function mapParkingAllocationWithSpot(
+  allocation: ParkingAllocationRow,
+  spot: ParkingSpotRow,
+): ParkingAllocationWithSpot {
+  return {
+    ...mapParkingAllocation(allocation),
+    parkingSpot: mapParkingSpot(spot),
   };
 }

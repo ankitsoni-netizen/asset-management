@@ -301,6 +301,99 @@ export type Database = {
           },
         ];
       };
+      parking_spots: {
+        Row: {
+          created_at: string;
+          id: string;
+          parking_type: Database["public"]["Enums"]["parking_type"];
+          slot_number: string | null;
+          status: Database["public"]["Enums"]["asset_status"];
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          parking_type: Database["public"]["Enums"]["parking_type"];
+          slot_number?: string | null;
+          status?: Database["public"]["Enums"]["asset_status"];
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          parking_type?: Database["public"]["Enums"]["parking_type"];
+          slot_number?: string | null;
+          status?: Database["public"]["Enums"]["asset_status"];
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      parking_allocations: {
+        Row: {
+          action: Database["public"]["Enums"]["allocation_action"];
+          allocated_at: string;
+          created_at: string;
+          department: string;
+          employee_email: string;
+          employee_id: string;
+          employee_name: string;
+          ended_at: string | null;
+          id: string;
+          is_current: boolean;
+          parking_spot_id: string;
+          position: string;
+          updated_at: string;
+          vehicle_numbers: string[];
+        };
+        Insert: {
+          action?: Database["public"]["Enums"]["allocation_action"];
+          allocated_at?: string;
+          created_at?: string;
+          department: string;
+          employee_email: string;
+          employee_id: string;
+          employee_name: string;
+          ended_at?: string | null;
+          id?: string;
+          is_current?: boolean;
+          parking_spot_id: string;
+          position: string;
+          updated_at?: string;
+          vehicle_numbers: string[];
+        };
+        Update: {
+          action?: Database["public"]["Enums"]["allocation_action"];
+          allocated_at?: string;
+          created_at?: string;
+          department?: string;
+          employee_email?: string;
+          employee_id?: string;
+          employee_name?: string;
+          ended_at?: string | null;
+          id?: string;
+          is_current?: boolean;
+          parking_spot_id?: string;
+          position?: string;
+          updated_at?: string;
+          vehicle_numbers?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "parking_allocations_employee_id_fkey";
+            columns: ["employee_id"];
+            isOneToOne: false;
+            referencedRelation: "employees";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "parking_allocations_parking_spot_id_fkey";
+            columns: ["parking_spot_id"];
+            isOneToOne: false;
+            referencedRelation: "parking_spots";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       employees: {
         Row: {
           code: string | null;
@@ -342,6 +435,21 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      allocate_parking: {
+        Args: {
+          p_employee_id: string;
+          p_parking_type: Database["public"]["Enums"]["parking_type"];
+          p_slot_number?: string | null;
+          p_vehicle_numbers: string[];
+        };
+        Returns: Json;
+      };
+      return_parking: {
+        Args: {
+          p_parking_spot_id: string;
+        };
+        Returns: Json;
+      };
       allocate_asset: {
         Args: {
           p_employee_id: string;
@@ -393,6 +501,7 @@ export type Database = {
       };
     };
     Enums: {
+      parking_type: "valet" | "basement_1" | "basement_2" | "basement_3";
       allocation_action: "allocated" | "reallocated" | "returned";
       asset_status: "allocated" | "available";
       audit_event:
@@ -417,3 +526,4 @@ export type Tables<T extends keyof Database["public"]["Tables"]> =
 
 export type AssetStatus = Database["public"]["Enums"]["asset_status"];
 export type AllocationAction = Database["public"]["Enums"]["allocation_action"];
+export type ParkingType = Database["public"]["Enums"]["parking_type"];

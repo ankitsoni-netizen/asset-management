@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { EmployeeEditLink } from "@/components/employees/EmployeeEditLink";
 import { EmployeeStatusButton } from "@/components/employees/EmployeeStatusButton";
+import { formatVehicleNumbers, parkingSpotLabel, type ParkingType } from "@/lib/parking";
 import { formatDate } from "@/lib/utils";
 
 export type EmployeeRosterRow = {
@@ -26,6 +27,14 @@ export type EmployeeRosterAsset = {
   brand: string | null;
   model: string | null;
   serialNumber: string | null;
+  allocatedAt: string;
+};
+
+export type EmployeeRosterParking = {
+  allocationId: string;
+  parkingType: string;
+  slotNumber: string | null;
+  vehicleNumbers: string[];
   allocatedAt: string;
 };
 
@@ -77,12 +86,46 @@ function EmployeeAssets({ assets }: { assets: EmployeeRosterAsset[] }) {
   );
 }
 
+function EmployeeParking({ parking }: { parking: EmployeeRosterParking[] }) {
+  if (parking.length === 0) {
+    return (
+      <p className="text-sm text-cf-muted">
+        No parking currently allocated.{" "}
+        <Link href="/parking/new" className="text-cf-primary">
+          Allocate parking
+        </Link>
+        .
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {parking.map((item) => (
+        <li key={item.allocationId} className="rounded-lg border border-cf-border bg-white px-3 py-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                {parkingSpotLabel(item.parkingType as ParkingType, item.slotNumber)}
+              </p>
+              <p className="mt-1 text-xs text-cf-muted">{formatVehicleNumbers(item.vehicleNumbers)}</p>
+            </div>
+            <p className="shrink-0 text-xs text-cf-muted">Since {formatDate(item.allocatedAt)}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function EmployeeDetails({
   employee,
   assets,
+  parking,
 }: {
   employee: EmployeeRosterRow;
   assets: EmployeeRosterAsset[];
+  parking: EmployeeRosterParking[];
 }) {
   return (
     <div className="space-y-5">
@@ -99,11 +142,21 @@ function EmployeeDetails({
           label="Assets held"
           value={`${assets.length} ${assets.length === 1 ? "device" : "devices"}`}
         />
+        <Detail
+          label="Parking held"
+          value={`${parking.length} ${parking.length === 1 ? "allocation" : "allocations"}`}
+        />
       </div>
       <div>
         <p className="cf-label">Allocated assets</p>
         <div className="mt-2">
           <EmployeeAssets assets={assets} />
+        </div>
+      </div>
+      <div>
+        <p className="cf-label">Allocated parking</p>
+        <div className="mt-2">
+          <EmployeeParking parking={parking} />
         </div>
       </div>
     </div>
@@ -113,9 +166,11 @@ function EmployeeDetails({
 export function EmployeeRoster({
   employees,
   assetsByEmployeeId,
+  parkingByEmployeeId,
 }: {
   employees: EmployeeRosterRow[];
   assetsByEmployeeId: Record<string, EmployeeRosterAsset[]>;
+  parkingByEmployeeId: Record<string, EmployeeRosterParking[]>;
 }) {
   const [openIds, setOpenIds] = useState<string[]>([]);
 
@@ -132,6 +187,7 @@ export function EmployeeRoster({
       <ul className="space-y-3 lg:hidden">
         {employees.map((employee) => {
           const assets = assetsByEmployeeId[employee.id] ?? [];
+          const parking = parkingByEmployeeId[employee.id] ?? [];
           const open = isOpen(employee.id);
           return (
             <li key={employee.id} className={`cf-card ${employee.disabled ? "opacity-70" : ""}`}>
@@ -161,6 +217,9 @@ export function EmployeeRoster({
                       {assets.length > 0
                         ? ` · ${assets.length} ${assets.length === 1 ? "asset" : "assets"}`
                         : ""}
+                      {parking.length > 0
+                        ? ` · ${parking.length} parking`
+                        : ""}
                     </span>
                   </span>
                 </button>
@@ -168,7 +227,7 @@ export function EmployeeRoster({
               </div>
               {open ? (
                 <div id={`employee-${employee.id}-details-mobile`} className="border-t border-cf-border px-4 py-4">
-                  <EmployeeDetails employee={employee} assets={assets} />
+                  <EmployeeDetails employee={employee} assets={assets} parking={parking} />
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <span className="font-mono text-xs text-cf-muted">{employee.code || "No employee ID"}</span>
                     <EmployeeStatusButton id={employee.id} name={employee.name} disabled={employee.disabled} />
@@ -200,6 +259,7 @@ export function EmployeeRoster({
                 <th className="px-4 py-3">Employee ID</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Assets</th>
+                <th className="px-4 py-3">Parking</th>
                 <th className="px-4 py-3"> </th>
                 <th className="w-10 px-3 py-3">
                   <span className="sr-only">Edit</span>
@@ -209,12 +269,14 @@ export function EmployeeRoster({
             <tbody>
               {employees.map((employee) => {
                 const assets = assetsByEmployeeId[employee.id] ?? [];
+                const parking = parkingByEmployeeId[employee.id] ?? [];
                 const open = isOpen(employee.id);
                 return (
                   <EmployeeTableRows
                     key={employee.id}
                     employee={employee}
                     assets={assets}
+                    parking={parking}
                     open={open}
                     onToggle={() => toggle(employee.id)}
                   />
@@ -231,11 +293,13 @@ export function EmployeeRoster({
 function EmployeeTableRows({
   employee,
   assets,
+  parking,
   open,
   onToggle,
 }: {
   employee: EmployeeRosterRow;
   assets: EmployeeRosterAsset[];
+  parking: EmployeeRosterParking[];
   open: boolean;
   onToggle: () => void;
 }) {
@@ -273,6 +337,7 @@ function EmployeeTableRows({
           <span className="rounded-full bg-cf-soft px-2 py-1 text-xs">{employee.disabled ? "Disabled" : "Active"}</span>
         </td>
         <td className="px-4 py-3 tabular-nums">{assets.length}</td>
+        <td className="px-4 py-3 tabular-nums">{parking.length}</td>
         <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
           <EmployeeStatusButton id={employee.id} name={employee.name} disabled={employee.disabled} />
         </td>
@@ -282,8 +347,8 @@ function EmployeeTableRows({
       </tr>
       {open ? (
         <tr className="border-t border-cf-border bg-cf-soft/30">
-          <td colSpan={10} className="px-5 py-5" id={`employee-${employee.id}-details`}>
-            <EmployeeDetails employee={employee} assets={assets} />
+          <td colSpan={11} className="px-5 py-5" id={`employee-${employee.id}-details`}>
+            <EmployeeDetails employee={employee} assets={assets} parking={parking} />
           </td>
         </tr>
       ) : null}

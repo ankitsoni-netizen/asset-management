@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AllocatedHolders } from "@/components/summary/AllocatedHolders";
 import { CollapsibleSection } from "@/components/summary/CollapsibleSection";
-import type { DashboardSummary } from "@/lib/summary";
+import { mergeParkingIntoHolders, type DashboardSummary, type ParkingAssignmentSummary } from "@/lib/summary";
 
 function StatCard({
   label,
@@ -42,8 +42,20 @@ function CountBar({ value, total }: { value: number; total: number }) {
   );
 }
 
-export function SummaryDashboard({ summary }: { summary: DashboardSummary }) {
+export function SummaryDashboard({
+  summary,
+  parking,
+  parkingAssignments,
+}: {
+  summary: DashboardSummary;
+  parking: {
+    allocated: number;
+    byType: { value: string; label: string; count: number }[];
+  };
+  parkingAssignments: ParkingAssignmentSummary[];
+}) {
   const { assets, employees } = summary;
+  const holders = mergeParkingIntoHolders(summary.holders, parkingAssignments);
 
   return (
     <div className="space-y-6">
@@ -94,6 +106,26 @@ export function SummaryDashboard({ summary }: { summary: DashboardSummary }) {
             hint={`${employees.withoutAssets} onboarded with no current device`}
             href="/allocations"
           />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-medium">Parking</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard
+            label="Allocated"
+            value={parking.allocated}
+            hint="Current valet and basement mappings"
+            href="/parking"
+          />
+          {parking.byType.map((type) => (
+            <StatCard
+              key={type.value}
+              label={type.label}
+              value={type.count}
+              href={`/parking?parkingType=${type.value}`}
+            />
+          ))}
         </div>
       </section>
 
@@ -189,7 +221,7 @@ export function SummaryDashboard({ summary }: { summary: DashboardSummary }) {
       </CollapsibleSection>
 
       <AllocatedHolders
-        holders={summary.holders.map((holder) => ({
+        holders={holders.map((holder) => ({
           employeeId: holder.employeeId,
           employeeName: holder.employeeName,
           employeeEmail: holder.employeeEmail,
@@ -203,6 +235,13 @@ export function SummaryDashboard({ summary }: { summary: DashboardSummary }) {
             model: asset.model,
             serialNumber: asset.serialNumber,
             allocatedAt: asset.allocatedAt.toISOString(),
+          })),
+          parking: holder.parking.map((row) => ({
+            allocationId: row.allocationId,
+            parkingType: row.parkingType,
+            slotNumber: row.slotNumber,
+            vehicleNumbers: row.vehicleNumbers,
+            allocatedAt: row.allocatedAt.toISOString(),
           })),
         }))}
       />

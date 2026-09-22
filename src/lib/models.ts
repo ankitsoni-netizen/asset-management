@@ -1,4 +1,4 @@
-import type { AllocationAction, AssetStatus } from "@/types/database";
+import type { AllocationAction, AssetStatus, ParkingType } from "@/types/database";
 
 export type EmailDeliveryStatus = "pending" | "sent" | "failed" | "not_configured";
 
@@ -85,4 +85,34 @@ export type AllocationWithAsset = AllocationRecord & {
     model: string | null;
     assetType: AssetTypeRecord;
   };
+};
+
+export type ParkingSpotRecord = {
+  id: string;
+  parkingType: ParkingType;
+  slotNumber: string | null;
+  status: AssetStatus;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ParkingAllocationRecord = {
+  id: string;
+  parkingSpotId: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  position: string;
+  employeeEmail: string;
+  vehicleNumbers: string[];
+  action: AllocationAction;
+  allocatedAt: Date;
+  endedAt: Date | null;
+  isCurrent: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ParkingAllocationWithSpot = ParkingAllocationRecord & {
+  parkingSpot: ParkingSpotRecord;
 };

@@ -66,6 +66,19 @@ export type AssignmentSummary = {
   allocatedAt: Date;
 };
 
+export type ParkingAssignmentSummary = {
+  allocationId: string;
+  parkingType: string;
+  slotNumber: string | null;
+  vehicleNumbers: string[];
+  employeeId: string;
+  employeeName: string;
+  employeeEmail: string;
+  department: string;
+  position: string;
+  allocatedAt: Date;
+};
+
 export type PersonAssignmentGroup = {
   employeeId: string;
   employeeName: string;
@@ -74,6 +87,7 @@ export type PersonAssignmentGroup = {
   position: string;
   latestAllocatedAt: Date;
   assets: AssignmentSummary[];
+  parking: ParkingAssignmentSummary[];
 };
 
 export type DashboardSummary = {
@@ -128,6 +142,7 @@ export function groupAssignmentsByPerson(assignments: AssignmentSummary[]): Pers
       position: assignment.position,
       latestAllocatedAt: assignment.allocatedAt,
       assets: [assignment],
+      parking: [],
     });
   }
 
@@ -138,6 +153,59 @@ export function groupAssignmentsByPerson(assignments: AssignmentSummary[]): Pers
         const byDate = b.allocatedAt.getTime() - a.allocatedAt.getTime();
         if (byDate !== 0) return byDate;
         return a.uid.localeCompare(b.uid);
+      }),
+    }))
+    .sort((a, b) => a.employeeName.localeCompare(b.employeeName) || a.employeeEmail.localeCompare(b.employeeEmail));
+}
+
+function parkingSortKey(row: ParkingAssignmentSummary) {
+  return `${row.parkingType} ${row.slotNumber ?? ""} ${row.vehicleNumbers.join(" ")}`.trim();
+}
+
+export function mergeParkingIntoHolders(
+  holders: PersonAssignmentGroup[],
+  parking: ParkingAssignmentSummary[],
+): PersonAssignmentGroup[] {
+  const groups = new Map(
+    holders.map((holder) => [
+      holder.employeeId,
+      {
+        ...holder,
+        assets: [...holder.assets],
+        parking: [...holder.parking],
+      },
+    ]),
+  );
+
+  for (const row of parking) {
+    const current = groups.get(row.employeeId);
+    if (current) {
+      current.parking.push(row);
+      if (row.allocatedAt.getTime() > current.latestAllocatedAt.getTime()) {
+        current.latestAllocatedAt = row.allocatedAt;
+      }
+      continue;
+    }
+
+    groups.set(row.employeeId, {
+      employeeId: row.employeeId,
+      employeeName: row.employeeName,
+      employeeEmail: row.employeeEmail,
+      department: row.department,
+      position: row.position,
+      latestAllocatedAt: row.allocatedAt,
+      assets: [],
+      parking: [row],
+    });
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      parking: [...group.parking].sort((a, b) => {
+        const byDate = b.allocatedAt.getTime() - a.allocatedAt.getTime();
+        if (byDate !== 0) return byDate;
+        return parkingSortKey(a).localeCompare(parkingSortKey(b));
       }),
     }))
     .sort((a, b) => a.employeeName.localeCompare(b.employeeName) || a.employeeEmail.localeCompare(b.employeeEmail));
@@ -159,6 +227,11 @@ export function filterHolders<
       brand: string | null;
       model: string | null;
       serialNumber: string | null;
+    }>;
+    parking?: Array<{
+      parkingType: string;
+      slotNumber: string | null;
+      vehicleNumbers: string[];
     }>;
   },
 >(holders: T[], query: string): T[] {
@@ -184,7 +257,17 @@ export function filterHolders<
         includesQuery([asset.brand, asset.model].filter(Boolean).join(" "), needle),
     );
 
-    return assets.length > 0 ? [{ ...holder, assets }] : [];
+    const parking = (holder.parking ?? []).filter((row) => {
+      const label = `${row.parkingType.replaceAll("_", " ")} ${row.slotNumber ?? ""}`.trim();
+      return (
+        includesQuery(row.parkingType, needle) ||
+        includesQuery(label, needle) ||
+        includesQuery(row.slotNumber, needle) ||
+        row.vehicleNumbers.some((vehicle) => includesQuery(vehicle, needle))
+      );
+    });
+
+    return assets.length > 0 || parking.length > 0 ? [{ ...holder, assets, parking }] : [];
   });
 }
 
